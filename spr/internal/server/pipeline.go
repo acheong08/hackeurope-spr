@@ -273,7 +273,7 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Create orchestrator
+	// Create orchestrator with progress callback for artifact notifications
 	orch := orchestrator.NewOrchestrator(
 		p.githubToken,
 		p.repoOwner,
@@ -281,6 +281,10 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 		"analyze-package.yml",
 		5,             // concurrency
 		5*time.Minute, // timeout
+		func(pkgName, pkgVersion string, artifactCount int) {
+			// Send artifact success to WebSocket client
+			p.sender.SendLog(fmt.Sprintf("Downloaded %d artifacts for %s@%s", artifactCount, pkgName, pkgVersion), "success")
+		},
 	)
 
 	// Send status updates for each package

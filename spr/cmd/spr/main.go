@@ -306,6 +306,7 @@ func runCheckCommand(args []string) {
 		workflowFile,
 		concurrency,
 		time.Duration(timeoutMinutes)*time.Minute,
+		nil, // No progress callback for CLI
 	)
 
 	_, err = orch.RunPackages(ctx, packagesToAnalyze, tempDir, outputDir)

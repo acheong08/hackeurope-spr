@@ -16,12 +16,16 @@ import (
 	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
+// ProgressCallback is called when a package's artifacts are successfully copied
+type ProgressCallback func(pkgName, pkgVersion string, artifactCount int)
+
 // Orchestrator manages GitHub Actions workflow runs for packages
 type Orchestrator struct {
 	client       *GitHubClient
 	workflowFile string
 	concurrency  int
 	timeout      time.Duration
+	progressCb   ProgressCallback
 }
 
 // PackageResult holds the result of analyzing a single package
@@ -34,12 +38,13 @@ type PackageResult struct {
 }
 
 // NewOrchestrator creates a new orchestrator
-func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, timeout time.Duration) *Orchestrator {
+func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, timeout time.Duration, progressCb ProgressCallback) *Orchestrator {
 	return &Orchestrator{
 		client:       NewGitHubClient(token, owner, repo),
 		workflowFile: workflowFile,
 		concurrency:  concurrency,
 		timeout:      timeout,
+		progressCb:   progressCb,
 	}
 }
 
@@ -224,6 +229,11 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 				}
 			}
 			log.Printf("    [Worker] Copied %d artifacts for %s@%s to output\n", len(artifactPaths), pkgName, pkgVersion)
+
+			// Notify via callback if provided (sends to WebSocket)
+			if o.progressCb != nil {
+				o.progressCb(pkgName, pkgVersion, len(artifactPaths))
+			}
 		}(ctx, artifacts, pkg.Name, pkg.Version)
 	}
 
