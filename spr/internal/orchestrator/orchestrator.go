@@ -6,12 +6,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/hackeurope/spr/pkg/models"
+	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
 // Orchestrator manages GitHub Actions workflow runs for packages
@@ -208,6 +209,8 @@ func (o *Orchestrator) pollWorkflowCompletion(ctx context.Context, runID int64) 
 		default:
 		}
 
+		log.Printf("    [Worker] Polling workflow run %d (attempt %d)\n", runID, attempt+1)
+
 		run, err := o.client.GetWorkflowRun(ctx, runID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get workflow status: %w", err)
@@ -250,7 +253,7 @@ func (o *Orchestrator) downloadArtifacts(ctx context.Context, runID int64, pkg m
 
 		// Extract zip
 		extractDir := filepath.Join(pkgDir, artifact.Name)
-		if err := os.MkdirAll(extractDir, 0755); err != nil {
+		if err := os.MkdirAll(extractDir, 0o755); err != nil {
 			return nil, fmt.Errorf("failed to create directory: %w", err)
 		}
 
@@ -284,7 +287,7 @@ func extractZip(data []byte, destDir string) error {
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 

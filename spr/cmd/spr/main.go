@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hackeurope/spr/internal/orchestrator"
-	"github.com/hackeurope/spr/internal/parser"
-	"github.com/hackeurope/spr/internal/registry"
-	"github.com/hackeurope/spr/pkg/models"
+	"github.com/acheong08/hackeurope-spr/internal/orchestrator"
+	"github.com/acheong08/hackeurope-spr/internal/parser"
+	"github.com/acheong08/hackeurope-spr/internal/registry"
+	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
 func main() {
@@ -61,7 +61,7 @@ func runCheckCommand(args []string) {
 		registryToken   = ""
 		githubToken     = os.Getenv("GITHUB_TOKEN")
 		repoOwner       = "acheong08"
-		repoName        = "hackeurope"
+		repoName        = "hackeurope-spr"
 		workflowFile    = "analyze-package.yml"
 		concurrency     = 5
 		timeoutMinutes  = 5
@@ -283,7 +283,7 @@ func runCheckCommand(args []string) {
 	}
 
 	// Create output directory
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
 		os.Exit(1)
 	}
@@ -372,7 +372,7 @@ func copyDir(src, dst string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(dst, 0755); err != nil {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
 
@@ -389,7 +389,7 @@ func copyDir(src, dst string) error {
 			if err != nil {
 				return err
 			}
-			if err := os.WriteFile(dstPath, data, 0644); err != nil {
+			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
 				return err
 			}
 		}

@@ -1,4 +1,4 @@
-module github.com/hackeurope/spr
+module github.com/acheong08/hackeurope-spr
 
 go 1.21
 

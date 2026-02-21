@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hackeurope/spr/pkg/models"
+	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
 // PackageLockV3 represents package-lock.json version 3 structure
