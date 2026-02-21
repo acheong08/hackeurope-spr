@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -152,55 +153,92 @@ func runCheckCommand(args []string) {
 		os.Exit(1)
 	}
 
-	// If no package.json specified, look in current directory
-	if packageJSONPath == "" {
+	// Need either package.json or lockfile
+	if packageJSONPath == "" && lockfilePath == "" {
+		// Auto-detect in current directory
 		cwd, err := os.Getwd()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting current directory: %v\n", err)
 			os.Exit(1)
 		}
 
-		path, err := parser.FindPackageJSON(cwd)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+		// Try package-lock.json first, then package.json
+		if _, err := os.Stat(filepath.Join(cwd, "package-lock.json")); err == nil {
+			lockfilePath = filepath.Join(cwd, "package-lock.json")
+		} else {
+			path, err := parser.FindPackageJSON(cwd)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			packageJSONPath = path
 		}
-		packageJSONPath = path
 	}
 
-	// Validate package.json
-	if err := parser.ValidatePackageJSON(packageJSONPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Parse package.json
-	pkgJSON, err := parser.ParsePackageJSON(packageJSONPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing package.json: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Analyzing: %s@%s\n", pkgJSON.Name, pkgJSON.Version)
-
-	// Build dependency graph
+	var pkgJSON *parser.PackageJSON
 	var graph *models.DependencyGraph
 
 	if lockfilePath != "" {
+		// Using lockfile directly
+		fmt.Printf("Using lockfile: %s\n", lockfilePath)
+
+		// Extract root package from lockfile
 		lm := parser.NewLockfileManager()
-		graph, err = lm.ParseLockfile(lockfilePath, pkgJSON.ToPackage())
+		rootPackage, err := lm.ExtractRootPackage(lockfilePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error extracting root from lockfile: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Parse lockfile to get full graph
+		graph, err = lm.ParseLockfile(lockfilePath, rootPackage)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error parsing lockfile: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Create a synthetic pkgJSON for display purposes
+		pkgJSON = &parser.PackageJSON{
+			Name:    "package",
+			Version: rootPackage.Version,
+		}
 	} else {
-		fmt.Println("Generating lockfile...")
-		graph, err = parser.BuildGraphFromPackageJSON(packageJSONPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error building dependency graph: %v\n", err)
+		// Using package.json
+		// Validate package.json
+		if err := parser.ValidatePackageJSON(packageJSONPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Parse package.json
+		var err error
+		pkgJSON, err = parser.ParsePackageJSON(packageJSONPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing package.json: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Build dependency graph
+		if lockfilePath != "" {
+			// Use provided lockfile
+			lm := parser.NewLockfileManager()
+			graph, err = lm.ParseLockfile(lockfilePath, pkgJSON.ToPackage())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error parsing lockfile: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			// Generate and parse lockfile
+			fmt.Println("Generating lockfile...")
+			graph, err = parser.BuildGraphFromPackageJSON(packageJSONPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error building dependency graph: %v\n", err)
+				os.Exit(1)
+			}
+		}
 	}
+
+	fmt.Printf("Analyzing: %s@%s\n", pkgJSON.Name, pkgJSON.Version)
 
 	// Print summary
 	fmt.Printf("\nDependency Graph Summary:\n")
@@ -308,9 +346,12 @@ func runCheckCommand(args []string) {
 func printCheckUsage() {
 	fmt.Println("Usage: spr check [options]")
 	fmt.Println("")
+	fmt.Println("Analyzes npm packages by uploading to registry and running behavioral tests.")
+	fmt.Println("Requires either -package or -lockfile (auto-detects if neither specified).")
+	fmt.Println("")
 	fmt.Println("Options:")
-	fmt.Println("  -package <path>        Path to package.json (auto-detect if not specified)")
-	fmt.Println("  -lockfile <path>       Path to package-lock.json (optional)")
+	fmt.Println("  -package <path>        Path to package.json (generates lockfile if needed)")
+	fmt.Println("  -lockfile <path>       Path to package-lock.json (uses existing lockfile)")
 	fmt.Println("  -output <dir>          Output directory for artifacts (default: ./analysis-results)")
 	fmt.Println("  -registry-url <url>    Gitea registry URL (default: https://git.duti.dev)")
 	fmt.Println("  -registry-owner <own>  Gitea registry owner (default: acheong08)")
