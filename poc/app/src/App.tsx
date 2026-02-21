@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { DependencyGraph } from "./components/DependencyGraph";
 import { Terminal } from "./components/Terminal";
-import { VulnerabilityPanel } from "./components/VulnerabilityPanel";
+import { BehaviouralAnalysis } from "./components/BehaviouralAnalysis";
 import Header from "./components/Header";
-import { FileUpload } from "./components/FileUpload";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -21,7 +20,7 @@ import { getLayoutedElements } from "./utils/getLayoutedElements";
 
 enum Tab {
   SPR_ANALYSIS,
-  VULNERABILITY_DETAILS,
+  BEHAVIOURAL_ANALYSIS,
 }
 
 const safePkgStyle = {
@@ -79,7 +78,7 @@ export default function App() {
       setSelectedTab(Tab.SPR_ANALYSIS);
     } else {
       setSelectedNode(nodeId);
-      setSelectedTab(Tab.VULNERABILITY_DETAILS);
+      setSelectedTab(Tab.BEHAVIOURAL_ANALYSIS);
     }
   };
 
@@ -115,7 +114,6 @@ export default function App() {
   const handleFileRemove = () => {
     setUploadedFile(null);
     setPackageData(null);
-    setLogs((prev) => [...prev, "\n> Package file removed"]);
   };
 
   const constructDependencyGraph = (dependencies: Dependency[]) => {
@@ -231,23 +229,23 @@ export default function App() {
                 {selectedNode && (
                   <button
                     className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
-                    onClick={() => handleSetPanel(Tab.VULNERABILITY_DETAILS)}
+                    onClick={() => handleSetPanel(Tab.BEHAVIOURAL_ANALYSIS)}
                     style={{
                       background:
-                        selectedTab == Tab.VULNERABILITY_DETAILS
+                        selectedTab == Tab.BEHAVIOURAL_ANALYSIS
                           ? "#0a0a0a"
                           : "transparent",
                       color:
-                        selectedTab == Tab.VULNERABILITY_DETAILS
+                        selectedTab == Tab.BEHAVIOURAL_ANALYSIS
                           ? "#22c55e"
                           : "#9ca3af",
                       borderBottom:
-                        selectedTab == Tab.VULNERABILITY_DETAILS
+                        selectedTab == Tab.BEHAVIOURAL_ANALYSIS
                           ? `2px solid #22c55e`
                           : "none",
                     }}
                   >
-                    Vulnerability Details
+                    Behavioural Analysis
                   </button>
                 )}
               </div>
@@ -255,7 +253,7 @@ export default function App() {
                 {selectedTab == Tab.SPR_ANALYSIS ? (
                   <Terminal logs={logs} addLog={addLog} />
                 ) : (
-                  <VulnerabilityPanel
+                  <BehaviouralAnalysis
                     selectedNode={selectedNode}
                     onClose={() => handleSetPanel(Tab.SPR_ANALYSIS)}
                   />
