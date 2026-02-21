@@ -3,6 +3,7 @@ import { DependencyGraph } from './components/DependencyGraph';
 import { Terminal } from './components/Terminal';
 import { VulnerabilityPanel } from './components/VulnerabilityPanel';
 import Header from './components/Header';
+import { FileUpload } from './components/FileUpload';
 import { 
   ResizablePanelGroup, 
   ResizablePanel, 
@@ -14,6 +15,9 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
   const [analysisKey, setAnalysisKey] = useState(0);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [packageData, setPackageData] = useState<any>(null);
+
 
   const startAnalysis = () => {
     setProgress(0);
@@ -32,6 +36,39 @@ export default function App() {
   const handleClosePanel = () => {
     setSelectedNode(null);
   };
+
+    const handleFileUpload = (file: File) => {
+    setUploadedFile(file);
+    
+    // Read and parse the file
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const json = JSON.parse(content);
+        setPackageData(json);
+        
+        // Add log that file was uploaded
+        setLogs(prev => [
+          ...prev,
+          `\n> Uploaded: ${file.name}`,
+          `> Ready to analyze package with ${Object.keys(json.dependencies || {}).length + Object.keys(json.devDependencies || {}).length} dependencies`,
+        ]);
+      } catch (error) {
+        alert('Error parsing package.json: ' + (error as Error).message);
+        setUploadedFile(null);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleFileRemove = () => {
+    setUploadedFile(null);
+    setPackageData(null);
+    setLogs(prev => [...prev, '\n> Package file removed']);
+  };
+
+  
 
   const analysisSteps = [
     { time: 0, progress: 0, log: '$ spr check ./package.json' },
@@ -94,7 +131,12 @@ export default function App() {
         color: '#22c55e'
       }}
     >
-      <Header startAnalysis={startAnalysis} />
+      <Header
+        startAnalysis={startAnalysis}
+        uploadedFile={uploadedFile}
+        onFileUpload={handleFileUpload}
+        onFileRemove={handleFileRemove}
+      />
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal" className="h-full">
           <ResizablePanel defaultSize={50} minSize={30}>
@@ -121,6 +163,7 @@ export default function App() {
                   background: '#111827'
                 }}
               >
+                
                 <button
                   onClick={() => setSelectedNode(null)}
                   className="flex-1 px-4 py-3 text-sm transition-colors"
