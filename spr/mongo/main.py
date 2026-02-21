@@ -370,6 +370,156 @@ def get_specific_data(
         detail="Provide one of: dns, command, or file query parameter"
     )
 
+@app.get("/stats_per_process/{collection_name}")
+def stats_per_process(
+    collection_name: str,
+    limit: int = 0,
+    offset: int = 0
+):
+    if collection_name not in db.list_collection_names():
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    collection = db[collection_name]
+
+    # ---- Find distinct processes ----
+    processes = list(collection.distinct("processName"))
+
+    # Apply pagination if requested
+    if limit > 0:
+        processes = processes[offset: offset + limit]
+    else:
+        processes = processes[offset:]
+
+    per_process_summary = {}
+
+    for process in processes:
+
+        # ---------------------
+        # Syscall frequency per process
+        # ---------------------
+        syscall_pipeline = [
+            {"$match": {"processName": process}},
+            {"$group": {"_id": "$eventName", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}}
+        ]
+        syscall_profile = {
+            item["_id"]: item["count"]
+            for item in collection.aggregate(syscall_pipeline)
+        }
+
+        # ---------------------
+        # File access per process (excluding node_modules)
+        # ---------------------
+        file_pipeline = [
+            {"$match": {"processName": process, "eventName": "openat"}},
+            {"$unwind": "$args"},
+            {"$match": {"args.name": "pathname"}},
+            {
+                "$group": {
+                    "_id": "$args.value",
+                    "count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"count": -1}}
+        ]
+
+        file_access_raw = list(collection.aggregate(file_pipeline))
+
+        # Filter out node_modules paths
+        file_access = {
+            item["_id"]: item["count"]
+            for item in file_access_raw
+            if not str(item["_id"]).startswith("/usr/local/lib/node_modules")
+            if not str(item["_id"]).startswith("/test/node_modules")
+        }
+
+        # ---------------------
+        # Executed commands per process
+        # ---------------------
+        exec_pipeline = [
+            {"$match": {"processName": process, "eventName": "execve"}},
+            {"$unwind": "$args"},
+            {"$match": {"args.name": "pathname"}},
+            {
+                "$group": {
+                    "_id": "$args.value",
+                    "count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"count": -1}}
+        ]
+        executed_commands = {
+            item["_id"]: item["count"]
+            for item in collection.aggregate(exec_pipeline)
+        }
+
+        # ---------------------
+        # DNS queries per process
+        # ---------------------
+        dns_pipeline = [
+            {"$match": {"processName": process, "eventName": "net_packet_dns_request"}},
+            {"$unwind": "$args"},
+            {"$match": {"args.name": "dns_questions"}},
+            {"$unwind": "$args.value"},
+            {
+                "$group": {
+                    "_id": "$args.value.query",
+                    "count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"count": -1}}
+        ]
+        dns_usage = {
+            item["_id"]: item["count"]
+            for item in collection.aggregate(dns_pipeline)
+        }
+
+        # ---------------------
+        # IP connections per process
+        # ---------------------
+        ip_pipeline = [
+            {"$match": {"processName": process, "eventName": "connect"}},
+            {"$unwind": "$args"},
+            {"$match": {"args.name": "addr"}},
+            {
+                "$group": {
+                    "_id": "$args.value",
+                    "count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"count": -1}}
+        ]
+
+        ip_usage = {}
+        for item in collection.aggregate(ip_pipeline):
+            addr = item["_id"]
+            if isinstance(addr, dict):
+                ip = addr.get("ip", "unknown")
+                port = addr.get("port", "")
+                key = f"{ip}:{port}" if port else ip
+            else:
+                key = str(addr)
+            ip_usage[key] = item["count"]
+
+        # ---------------------
+        # Build process summary
+        # ---------------------
+        per_process_summary[process] = {
+            "syscall_profile": syscall_profile,
+            "file_access": file_access,
+            "executed_commands": executed_commands,
+            "network_activity": {
+                "ips": ip_usage,
+                "dns": dns_usage
+            }
+        }
+
+    return {
+        "collection": collection_name,
+        "per_process": per_process_summary,
+        "count_processes": len(per_process_summary),
+    }
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

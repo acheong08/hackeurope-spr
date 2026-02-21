@@ -25,19 +25,5 @@ services:
     ports:
       - "8001:8001"
 
-  mcp-service:
-    build: mcp/
-    container_name: mcp-service
-    restart: always
-    depends_on:
-      - mongo
-    environment:
-      MONGO_URI: mongodb://root:example@mongo:27017
-      DB_NAME: tracee_analysis
-    ports:
-      - "8001:8001"
-
-
-
 volumes:
   mongo_data:
