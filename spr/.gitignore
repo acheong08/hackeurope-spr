@@ -1,2 +1,4 @@
 analysis-results
 .env
+aggregate.json
+behavior.jsonl
