@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { DependencyGraph } from './components/DependencyGraph';
 import { Terminal } from './components/Terminal';
 import { VulnerabilityPanel } from './components/VulnerabilityPanel';
-import { RotateCcw } from 'lucide-react';
+import Header from './components/Header';
 import { 
   ResizablePanelGroup, 
   ResizablePanel, 
@@ -15,11 +15,15 @@ export default function App() {
   const [analysisKey, setAnalysisKey] = useState(0);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
-  const restartAnalysis = () => {
+  const startAnalysis = () => {
     setProgress(0);
     setLogs([]);
     setAnalysisKey(prev => prev + 1);
   };
+
+  const addLog = (log: string) => {
+    setLogs((curLogs) => [...curLogs, log]);
+  }
 
   const handleNodeClick = (nodeId: string) => {
     console.log("Selected node set:", nodeId);
@@ -73,7 +77,7 @@ export default function App() {
     analysisSteps.forEach((step) => {
       const timer = setTimeout(() => {
         setProgress(step.progress);
-        setLogs((prev) => [...prev, step.log]);
+        addLog(step.log);
       }, step.time);
       timers.push(timer);
     });
@@ -91,49 +95,9 @@ export default function App() {
         color: '#22c55e'
       }}
     >
-      {/* Header */}
-      <header 
-        className="border-b px-4 md:px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3"
-        style={{ 
-          borderColor: '#374151',
-          background: '#111827'
-        }}
-      >
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: '#22c55e' }}>
-              <span className="text-lg" style={{ color: '#000' }}>S</span>
-            </div>
-            <h1 className="text-xl md:text-2xl" style={{ color: '#22c55e' }}>
-              HackEurope SPR
-            </h1>
-          </div>
-          <span className="text-xs md:text-sm px-2 py-1 rounded" style={{ 
-            background: '#374151',
-            color: '#9ca3af'
-          }}>
-            Supply Chain Package Registry
-          </span>
-        </div>
-        <div className="flex gap-2 self-end md:self-auto">
-          <button
-            onClick={restartAnalysis}
-            className="p-2 rounded-lg transition-colors hover:bg-opacity-80"
-            style={{ 
-              background: '#374151',
-              color: '#22c55e'
-            }}
-            aria-label="Restart Analysis"
-          >
-            <RotateCcw className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content */}
+      <Header startAnalysis={startAnalysis} />
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal" className="h-full">
-          {/* Left: Dependency Graph */}
           <ResizablePanel defaultSize={50} minSize={30}>
             <div 
               className="h-full border-r"
@@ -149,11 +113,8 @@ export default function App() {
               background: '#374151',
             }} 
           />
-
-          {/* Right: Terminal / Vulnerability Panel (toggleable) */}
           <ResizablePanel defaultSize={50} minSize={30}>
             <div className="h-full flex flex-col">
-              {/* Tab Navigation */}
               <div 
                 className="flex border-b"
                 style={{ 
@@ -185,11 +146,9 @@ export default function App() {
                   </button>
                 )}
               </div>
-
-              {/* Content Area */}
               <div className="flex-1 overflow-hidden">
                 {!selectedNode ? (
-                  <Terminal logs={logs} />
+                  <Terminal logs={logs} addLog={addLog} />
                 ) : (
                   <VulnerabilityPanel 
                     selectedNode={selectedNode} 

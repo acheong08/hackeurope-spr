@@ -1,11 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useContext, useState } from 'react';
+import { SocketContext } from '../providers/SocketProvider';
 
 interface TerminalProps {
-  logs: string[];
+  logs: string[],
+  addLog: (log: string) => void
 }
 
-export function Terminal({ logs }: TerminalProps) {
+export function Terminal({ logs, addLog }: TerminalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const socket = useContext(SocketContext);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -25,6 +28,13 @@ export function Terminal({ logs }: TerminalProps) {
     }
     return '#4ade80';
   };
+
+  useEffect(() => {
+    socket?.on("log", addLog);
+    return () => {
+      socket?.off("log", addLog);
+    }
+  }, [socket]);
 
   return (
     <div className="h-full flex flex-col">

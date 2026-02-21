@@ -6,6 +6,7 @@ import {
   Background,
   useNodesState,
   useEdgesState,
+  MarkerType,
   type Node,
   type Edge,
 } from '@xyflow/react';
@@ -29,6 +30,14 @@ const flaggedPkgStyle = {
   padding: '10px',
 };
 
+const dataGatheringPkgStyle = {
+  background: '#1f2937',
+  color: '#9ca3af',
+  border: '2px solid #374151',
+  borderRadius: '8px',
+  padding: '10px',
+};
+
 interface DependencyGraph {
   progress: number
   onNodeClick: (nodeId: string) => void;
@@ -39,22 +48,28 @@ export function DependencyGraph({ progress, onNodeClick  }: DependencyGraph) {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const socket = useContext(SocketContext);
 
-  const updateGraph = (newDependency: Dependency) => {
+  const constructDependencyGraph = (dependencies: Dependency[]) => {
+    for (const dependency of dependencies) {
+      updateGraph(dependency);
+    }
+  }
+
+  const updateGraph = (dependency: Dependency) => {
     const newNode: Node = {
-      id: newDependency.label,
+      id: dependency.label,
       type: 'default',
-      data: { label: newDependency.label },
+      data: { label: dependency.label },
       position: { x: 0, y: 0 },
-      style: newDependency.flagged ? flaggedPkgStyle : safePkgStyle,
+      style: dataGatheringPkgStyle
     };
     
     let newEdge: Edge | null = null;
-    if (newDependency.dependent) {
+    if (dependency.dependent) {
       newEdge = {
-        id: `${newDependency.dependent}-${newDependency.label}`,
-        source: newDependency.dependent,
-        target: newDependency.label,
-        animated: true,
+        id: `${dependency.dependent}-${dependency.label}`,
+        source: dependency.dependent,
+        target: dependency.label,
+        markerEnd: { type: MarkerType.ArrowClosed }
       };
     }
 
@@ -71,14 +86,15 @@ export function DependencyGraph({ progress, onNodeClick  }: DependencyGraph) {
   };
 
   useEffect(() => {
-    socket?.on("new-dependency", updateGraph);
-    
-    updateGraph({ label: 'kleur@4.1.5', flagged: false });
-    updateGraph({ label: 'nanoid@3.3.10', dependent: 'kleur@4.1.5', flagged: true });
-    updateGraph({ label: 'test@4.2.10', dependent: 'kleur@4.1.5', flagged: false });
+    socket?.on("dependency-graph", constructDependencyGraph);
+    constructDependencyGraph([
+      { label: 'kleur@4.1.5' }, 
+      { label: 'nanoid@3.3.10', dependent: 'kleur@4.1.5' }, 
+      { label: 'test@4.2.10', dependent: 'kleur@4.1.5' }
+    ]);
 
     return () => {
-      socket?.off("new-dependency", updateGraph);
+      socket?.off("dependency-graph", constructDependencyGraph);
     }
   }, [socket]);
 
@@ -128,9 +144,9 @@ export function DependencyGraph({ progress, onNodeClick  }: DependencyGraph) {
         fitView
         style={{ background: '#0a0a0a' }}
       >
-          <Background color={'#22c55e'} gap={16} />
-          <Controls />
-        </ReactFlow>
+        <Background gap={16} />
+        <Controls />
+      </ReactFlow>
       </div>
     </div>
   );
