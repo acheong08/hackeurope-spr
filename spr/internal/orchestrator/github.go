@@ -77,7 +77,10 @@ func (c *GitHubClient) TriggerWorkflow(ctx context.Context, workflowFile string,
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
@@ -121,7 +124,10 @@ func (c *GitHubClient) GetWorkflowRun(ctx context.Context, runID int64) (*Workfl
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("unexpected status %d (failed to read body: %v)", resp.StatusCode, readErr)
+		}
 		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -164,7 +170,10 @@ func (c *GitHubClient) ListArtifacts(ctx context.Context, runID int64) ([]Artifa
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("unexpected status %d (failed to read body: %v)", resp.StatusCode, readErr)
+		}
 		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -229,7 +238,10 @@ func (c *GitHubClient) DownloadArtifact(ctx context.Context, artifactID int64) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("unexpected status %d (failed to read body: %v)", resp.StatusCode, readErr)
+		}
 		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 

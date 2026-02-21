@@ -178,9 +178,17 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 		return result
 	}
 
-	// 5. Copy artifacts to output directory immediately (non-blocking)
+	// 5. Copy artifacts to output directory immediately (non-blocking, with context cancellation)
 	if len(artifacts) > 0 && outputDir != "" {
-		go func(artifactPaths []string, pkgName, pkgVersion string) {
+		go func(ctx context.Context, artifactPaths []string, pkgName, pkgVersion string) {
+			// Check if context is cancelled before starting
+			select {
+			case <-ctx.Done():
+				log.Printf("    [Worker] Skipping artifact copy for %s@%s: context cancelled\n", pkgName, pkgVersion)
+				return
+			default:
+			}
+
 			pkgOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", pkgName, pkgVersion))
 			if err := os.MkdirAll(pkgOutputDir, 0o755); err != nil {
 				log.Printf("    [Worker] Warning: failed to create output directory for %s@%s: %v\n", pkgName, pkgVersion, err)
@@ -188,13 +196,20 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 			}
 
 			for _, artifactPath := range artifactPaths {
-				destPath := filepath.Join(pkgOutputDir, filepath.Base(artifactPath))
-				if err := copyDir(artifactPath, destPath); err != nil {
-					log.Printf("    [Worker] Warning: failed to copy artifact %s: %v\n", artifactPath, err)
+				// Check context before each file copy
+				select {
+				case <-ctx.Done():
+					log.Printf("    [Worker] Aborting artifact copy for %s@%s: context cancelled\n", pkgName, pkgVersion)
+					return
+				default:
+					destPath := filepath.Join(pkgOutputDir, filepath.Base(artifactPath))
+					if err := copyDir(artifactPath, destPath); err != nil {
+						log.Printf("    [Worker] Warning: failed to copy artifact %s: %v\n", artifactPath, err)
+					}
 				}
 			}
 			log.Printf("    [Worker] Copied %d artifacts for %s@%s to output\n", len(artifactPaths), pkgName, pkgVersion)
-		}(artifacts, pkg.Name, pkg.Version)
+		}(ctx, artifacts, pkg.Name, pkg.Version)
 	}
 
 	result.Success = true
@@ -207,8 +222,7 @@ func (o *Orchestrator) pollWorkflowCompletion(ctx context.Context, runID int64) 
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	baseDelay := 5 * time.Second
-	maxDelay := 30 * time.Second
+	const pollInterval = 15 * time.Second
 	attempt := 0
 
 	for {
@@ -221,7 +235,8 @@ func (o *Orchestrator) pollWorkflowCompletion(ctx context.Context, runID int64) 
 		default:
 		}
 
-		log.Printf("    [Worker] Polling workflow run %d (attempt %d)\n", runID, attempt+1)
+		attempt++
+		log.Printf("    [Worker] Polling workflow run %d (attempt %d)\n", runID, attempt)
 
 		run, err := o.client.GetWorkflowRun(ctx, runID)
 		if err != nil {
@@ -232,20 +247,13 @@ func (o *Orchestrator) pollWorkflowCompletion(ctx context.Context, runID int64) 
 			return run, nil
 		}
 
-		// Exponential backoff with cap
-		attempt++
-		delay := baseDelay * time.Duration(1<<attempt)
-		if delay > maxDelay {
-			delay = maxDelay
-		}
-
 		select {
 		case <-ctx.Done():
 			if ctx.Err() == context.Canceled {
 				return nil, fmt.Errorf("workflow polling cancelled")
 			}
 			return nil, fmt.Errorf("timeout waiting for workflow completion")
-		case <-time.After(delay):
+		case <-time.After(pollInterval):
 			// Continue polling
 		}
 	}
@@ -295,10 +303,18 @@ func extractZip(data []byte, destDir string) error {
 	}
 
 	for _, file := range reader.File {
+		// Security check: prevent zip slip - validate BEFORE joining
+		// filepath.IsLocal checks: not empty, not absolute, no .., no reserved names
+		if !filepath.IsLocal(file.Name) {
+			log.Printf("    [Worker] Warning: skipping dangerous path in zip: %s\n", file.Name)
+			continue
+		}
+
 		path := filepath.Join(destDir, file.Name)
 
-		// Security check: prevent zip slip
+		// Double-check the resolved path is within destination
 		if !isSubPath(path, destDir) {
+			log.Printf("    [Worker] Warning: skipping path that escapes destination: %s\n", file.Name)
 			continue
 		}
 
