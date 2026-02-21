@@ -26,7 +26,6 @@ export default function App() {
   }
 
   const handleNodeClick = (nodeId: string) => {
-    console.log("Selected node set:", nodeId);
     setSelectedNode(nodeId);
   };
 
