@@ -269,8 +269,6 @@ func (o *Orchestrator) downloadArtifacts(ctx context.Context, runID int64, pkg m
 	}
 
 	var downloaded []string
-	normalizedName := tester.NormalizePackageName(pkg.Name)
-	pkgDir := filepath.Join(tempDir, fmt.Sprintf("%s@%s", normalizedName, pkg.Version))
 
 	for _, artifact := range artifacts {
 		if artifact.Expired {
@@ -283,7 +281,7 @@ func (o *Orchestrator) downloadArtifacts(ctx context.Context, runID int64, pkg m
 		}
 
 		// Extract zip
-		extractDir := filepath.Join(pkgDir, artifact.Name)
+		extractDir := filepath.Join(tempDir, artifact.Name)
 		if err := os.MkdirAll(extractDir, 0o755); err != nil {
 			return nil, fmt.Errorf("failed to create directory: %w", err)
 		}
