@@ -1,0 +1,202 @@
+{
+  "collection": "default",
+  "per_process": {
+    "mkdir": {
+      "syscall_profile": {
+        "openat": 5
+      },
+      "file_access": {
+        "/etc/ld.so.cache": 1,
+        "/lib/x86_64-linux-gnu/libc.so.6": 1,
+        "/lib/x86_64-linux-gnu/libpcre2-8.so.0": 1,
+        "/lib/x86_64-linux-gnu/libselinux.so.1": 1,
+        "/proc/filesystems": 1
+      },
+      "executed_commands": {},
+      "network_activity": {
+        "ips": {},
+        "dns_records": {}
+      }
+    },
+    "node": {
+      "syscall_profile": {
+        "openat": 64
+      },
+      "file_access": {
+        "/dev/null": 2,
+        "/etc/ld.so.cache": 3,
+        "/etc/ssl/openssl.cnf": 3,
+        "/lib/x86_64-linux-gnu/libc.so.6": 3,
+        "/lib/x86_64-linux-gnu/libdl.so.2": 3,
+        "/lib/x86_64-linux-gnu/libgcc_s.so.1": 3,
+        "/lib/x86_64-linux-gnu/libm.so.6": 3,
+        "/lib/x86_64-linux-gnu/libpthread.so.0": 3,
+        "/lib/x86_64-linux-gnu/libstdc++.so.6": 3,
+        "/proc/meminfo": 3,
+        "/proc/self/cgroup": 3,
+        "/proc/self/maps": 9,
+        "/proc/sys/vm/overcommit_memory": 1,
+        "/sys/fs/cgroup//memory.high": 3,
+        "/sys/fs/cgroup//memory.max": 3,
+        "/test/index.js": 1,
+        "/test/package.json": 2,
+        "/test/test-prototype.js": 1,
+        "/usr/local/bin/node": 3
+      },
+      "executed_commands": {},
+      "network_activity": {
+        "ips": {},
+        "dns_records": {}
+      }
+    },
+    "npm": {
+      "syscall_profile": {
+        "connect": 3,
+        "execve": 3,
+        "net_packet_dns_request": 2,
+        "openat": 216
+      },
+      "file_access": {
+        "/dev/null": 1,
+        "/etc/host.conf": 1,
+        "/etc/hosts": 1,
+        "/etc/ld.so.cache": 1,
+        "/etc/localtime": 1,
+        "/etc/nsswitch.conf": 1,
+        "/etc/resolv.conf": 1,
+        "/lib/x86_64-linux-gnu/libc.so.6": 1,
+        "/root/.npm/_cacache/index-v5/02/99/7fce6880ea0dde45aa2eba1dd30be60a341a43bd53b3655b589f87089db9": 2,
+        "/root/.npm/_cacache/index-v5/02/f0/3ec871198b25259894afad3ae722d803db140617cd383f06ef7a8b5c4931": 2,
+        "/root/.npm/_cacache/index-v5/18/2f/e5528249c9d800fe5756838a291f85ee62df9e0122e998ea075294a67ebf": 2,
+        "/root/.npm/_cacache/index-v5/1a/9f/3a5e6b36e2fecb1e87779f5efa922ca5ea34ea98ec6a35344154bd61d162": 2,
+        "/root/.npm/_cacache/index-v5/1f/61/ad8017e9963d8bca3635542697c18ae075368b831ad7a0a248850f826bfb": 2,
+        "/root/.npm/_cacache/index-v5/30/00/5e73f089def4e6137edd0bdd53284a7836f6b86f5f86b4edc9427f88d0e1": 2,
+        "/root/.npm/_cacache/index-v5/41/d5/cc0fd54d64450cd9dadffc01db5f2e9794e73bbd3062c1a53e0f060436d1": 2,
+        "/root/.npm/_cacache/index-v5/4c/a5/53f69ff52cb7c4834f897ca17c5e8bbbdb541cb4d102b8055b185b20760b": 2,
+        "/root/.npm/_cacache/index-v5/53/d4/e86b5a5195790d3bc0013bc08551ebfe4bf0ae7e4135dcff35cd6aa08786": 2,
+        "/root/.npm/_cacache/index-v5/56/0b/0d895ba77414c5eccd01380490f0273c463fa137f23f95738e6742914837": 2,
+        "/root/.npm/_cacache/index-v5/59/63/7673f6aeb652590510368421c311029e68f585b62f0c89452b7c9743d826": 2,
+        "/root/.npm/_cacache/index-v5/72/92/f87364cd5cda6e34acb710233f3e011498a0ce0ad8ba1a94a36910939165": 2,
+        "/root/.npm/_cacache/index-v5/8a/48/39d595c2fb15591f5b3891c998c39bf24062c5dfcbfc6af4dd70d28c4a23": 2,
+        "/root/.npm/_cacache/index-v5/8b/6d/25738128a56d0bedad51b13bf4f8bc68eb686bc4f1c27b90678191a298bd": 2,
+        "/root/.npm/_cacache/index-v5/96/c4/3ef9ac7256760994c3c6dd246fdf19c4101d176ffcb76d7defeceaf45fd8": 2,
+        "/root/.npm/_cacache/index-v5/99/b8/2121bc0cc4409756f1b4e61d72d892742934af0df6263332efe48a2b0ee5": 2,
+        "/root/.npm/_cacache/index-v5/a5/5f/b5ef599699eac1055b25334b0b6e0ae0c10d79278988434c0127a623eaef": 2,
+        "/root/.npm/_cacache/index-v5/a8/a0/89fc4a7029145aa7bb1aea2fb3ae6a5674f1179e72ce80b0e003d3979af0": 2,
+        "/root/.npm/_cacache/index-v5/b2/f6/cbb46adcc6b39c676c75a456f692d64514e6bdce52cd0115fc02f2f62422": 2,
+        "/root/.npm/_cacache/index-v5/b6/2e/5ec8e8ddf38fe915e0b69b30933a7e5a5b991d33d303a0180afe43d4b385": 2,
+        "/root/.npm/_cacache/index-v5/b9/c9/1af1838dcedb4b3acd61ff07c183a1359fb501bb5df79f0484a080534caf": 2,
+        "/root/.npm/_cacache/index-v5/c0/0a/2fe585b90ad513cd8c04711fc86fc17d3b3ec2129afc86ff1be060fdfee6": 2,
+        "/root/.npm/_cacache/index-v5/e4/01/bf8930ef3c4874f09fd1e4dadc7d6744646e2314d4bc1cd042c3f79f8376": 5,
+        "/root/.npm/_cacache/index-v5/fe/0c/80360c568c6763c739a1f85ba23d5f1d2b587cd241f5645a90d50160b327": 4,
+        "/root/.npm/_cacache/tmp/00d22df3": 1,
+        "/root/.npm/_cacache/tmp/03112a0c": 1,
+        "/root/.npm/_cacache/tmp/0aa389ea": 1,
+        "/root/.npm/_cacache/tmp/12766600": 1,
+        "/root/.npm/_cacache/tmp/289bc315": 1,
+        "/root/.npm/_cacache/tmp/2a07d0c0": 1,
+        "/root/.npm/_cacache/tmp/2adf901f": 1,
+        "/root/.npm/_cacache/tmp/2d5e2320": 1,
+        "/root/.npm/_cacache/tmp/2f956513": 1,
+        "/root/.npm/_cacache/tmp/3cab486c": 1,
+        "/root/.npm/_cacache/tmp/3f3ec17b": 1,
+        "/root/.npm/_cacache/tmp/532a5153": 1,
+        "/root/.npm/_cacache/tmp/648c4c8b": 1,
+        "/root/.npm/_cacache/tmp/7182c69d": 1,
+        "/root/.npm/_cacache/tmp/734eec7e": 1,
+        "/root/.npm/_cacache/tmp/73cc2b7f": 1,
+        "/root/.npm/_cacache/tmp/7b17c631": 1,
+        "/root/.npm/_cacache/tmp/82148d51": 1,
+        "/root/.npm/_cacache/tmp/89c147a4": 1,
+        "/root/.npm/_cacache/tmp/990642a1": 1,
+        "/root/.npm/_cacache/tmp/ac8c56ec": 1,
+        "/root/.npm/_cacache/tmp/c69424a5": 1,
+        "/root/.npm/_cacache/tmp/d37e6df5": 1,
+        "/root/.npm/_cacache/tmp/e79a18c9": 1,
+        "/root/.npm/_cacache/tmp/f0c33d6e": 1,
+        "/root/.npm/_logs": 1,
+        "/root/.npm/_update-notifier-last-checked": 1,
+        "/root/.npmrc": 1,
+        "/test/.npmrc": 1,
+        "/test/npm-shrinkwrap.json": 3,
+        "/test/package-lock.json": 3,
+        "/test/package.json": 4,
+        "/test/yarn.lock": 3,
+        "/usr/local/etc/npmrc": 1
+      },
+      "executed_commands": {
+        "/usr/local/bin/node": 1,
+        "/usr/local/sbin/node": 2
+      },
+      "network_activity": {
+        "ips": {
+          "": 3
+        },
+        "dns_records": {
+          "git.duti.dev": 2
+        }
+      }
+    },
+    "npm install": {
+      "syscall_profile": {
+        "connect": 3,
+        "openat": 753
+      },
+      "file_access": {
+        "/etc/netsvc.conf": 1,
+        "/etc/nsswitch.conf": 1,
+        "/etc/resolv.conf": 1,
+        "/etc/svc.conf": 1,
+        "/root/.npm/_logs/2026-02-21T23_41_10_327Z-debug-0.log": 1
+      },
+      "executed_commands": {},
+      "network_activity": {
+        "ips": {
+          "": 3
+        },
+        "dns_records": {}
+      }
+    },
+    "runc:[2:INIT]": {
+      "syscall_profile": {
+        "execve": 4,
+        "openat": 52
+      },
+      "file_access": {
+        "/etc/passwd": 4,
+        "/proc": 28,
+        "/proc/filesystems": 4,
+        "/proc/sys/kernel/cap_last_cap": 4,
+        "11": 8,
+        "5": 4
+      },
+      "executed_commands": {
+        "/usr/bin/mkdir": 1,
+        "/usr/bin/sh": 3
+      },
+      "network_activity": {
+        "ips": {},
+        "dns_records": {}
+      }
+    },
+    "sh": {
+      "syscall_profile": {
+        "execve": 3,
+        "openat": 6
+      },
+      "file_access": {
+        "/etc/ld.so.cache": 3,
+        "/lib/x86_64-linux-gnu/libc.so.6": 3
+      },
+      "executed_commands": {
+        "/usr/local/bin/node": 2,
+        "/usr/local/bin/npm": 1
+      },
+      "network_activity": {
+        "ips": {},
+        "dns_records": {}
+      }
+    }
+  },
+  "count_processes": 6
+}
