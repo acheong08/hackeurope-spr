@@ -186,6 +186,32 @@ func (u *Uploader) UploadPackageWithMetadata(ctx context.Context, name, version 
 	return fmt.Errorf("failed to upload package: status %d, body: %s", resp.StatusCode, string(body))
 }
 
+// normalizeBinField ensures the bin field is in object format
+// npm allows bin to be a string (e.g., "bin": "./cli.js") which needs to be
+// converted to an object like {"package-name": "./cli.js"} for Gitea registry
+func normalizeBinField(apiMetadata map[string]interface{}, pkgName string) map[string]interface{} {
+	if bin, ok := apiMetadata["bin"]; ok {
+		switch v := bin.(type) {
+		case string:
+			// Convert string to object using unscoped package name as key
+			unscopedName := pkgName
+			if strings.HasPrefix(pkgName, "@") {
+				parts := strings.SplitN(pkgName, "/", 2)
+				if len(parts) == 2 {
+					unscopedName = parts[1]
+				}
+			}
+			return map[string]interface{}{
+				unscopedName: v,
+			}
+		case map[string]interface{}:
+			// Already in correct format
+			return v
+		}
+	}
+	return nil
+}
+
 // buildMetadataFromAPI constructs npm package metadata JSON using pre-fetched API metadata
 // The npm registry API already returns normalized fields (bin as object, repository as object, etc.)
 func (u *Uploader) buildMetadataFromAPI(name, version string, tarball []byte, apiMetadata map[string]interface{}) (map[string]interface{}, error) {
@@ -224,10 +250,15 @@ func (u *Uploader) buildMetadataFromAPI(name, version string, tarball []byte, ap
 	// Copy normalized fields from API metadata (npm registry already normalizes these)
 	if apiMetadata != nil {
 		// Essential fields for npx and module resolution
-		for _, field := range []string{"scripts", "main", "module", "type", "bin"} {
+		for _, field := range []string{"scripts", "main", "module", "type"} {
 			if val, ok := apiMetadata[field]; ok {
 				manifest[field] = val
 			}
+		}
+
+		// Handle bin field specially - needs normalization from string to object
+		if binVal := normalizeBinField(apiMetadata, name); binVal != nil {
+			manifest["bin"] = binVal
 		}
 
 		// Optional metadata fields (all already normalized by npm API)
