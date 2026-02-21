@@ -4,11 +4,10 @@ from datetime import datetime
 from typing import Generator
 from typing import Optional
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import BulkWriteError
 from collections import defaultdict
-
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 import os
 
 app = FastAPI(title="Tracee Ingestion Service")
@@ -39,11 +38,13 @@ def stream_json_lines(file) -> Generator[dict, None, None]:
 
 # ---- Endpoint: Upload Tracee File ----
 @app.post("/upload-tracee")
-async def upload_tracee(file: UploadFile = File(...)):
+async def upload_tracee(
+    collection_name: str = Query(..., description="MongoDB collection name"),
+    file: UploadFile = File(...)
+):
     """
     Upload a Tracee JSONL file.
-    Creates a new collection for each upload.
-    Inserts every trace event as its own document.
+    Inserts every trace event as its own document into the given collection.
     """
 
     allowed_extensions = (".json", ".jsonl", ".log")
@@ -52,12 +53,18 @@ async def upload_tracee(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=400,
             detail="File must be .json, .jsonl, or .log"
-        )    # Create unique collection name
+        )
 
-    collection_name = f"tracee_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    # Validate collection name (basic safety)
+    if not collection_name.isidentifier():
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid collection name"
+        )
+
     collection = db[collection_name]
 
-    # Optional: create indexes for common trace queries
+    # Optional: create indexes
     collection.create_index([("timestamp", ASCENDING)])
     collection.create_index([("processId", ASCENDING)])
     collection.create_index([("eventName", ASCENDING)])
@@ -69,7 +76,7 @@ async def upload_tracee(file: UploadFile = File(...)):
 
     try:
         while True:
-            chunk = await file.read(1024 * 1024)  # 1MB chunk
+            chunk = await file.read(1024 * 1024)
             if not chunk:
                 break
 
@@ -87,7 +94,6 @@ async def upload_tracee(file: UploadFile = File(...)):
                     inserted_count += len(batch)
                     batch = []
 
-        # Insert remaining batch
         if batch:
             collection.insert_many(batch)
             inserted_count += len(batch)
