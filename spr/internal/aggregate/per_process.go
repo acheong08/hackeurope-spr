@@ -127,20 +127,24 @@ func (pa *ProcessAggregator) processExecve(data *processData, event *TraceeEvent
 func (pa *ProcessAggregator) processConnect(data *processData, event *TraceeEvent) {
 	for _, arg := range event.Args {
 		if arg.Name == "addr" {
-			var addr struct {
-				IP   string `json:"ip"`
-				Port int    `json:"port"`
+			var sockAddr struct {
+				Family  string `json:"sa_family"`
+				SinAddr string `json:"sin_addr"`
+				SinPort string `json:"sin_port"`
+				SunPath string `json:"sun_path"`
 			}
-			if err := json.Unmarshal(arg.Value, &addr); err == nil {
-				key := addr.IP
-				if addr.Port != 0 {
-					key = fmt.Sprintf("%s:%d", addr.IP, addr.Port)
+			if err := json.Unmarshal(arg.Value, &sockAddr); err == nil {
+				// Skip local Unix sockets (AF_UNIX) - these are IPC, not network
+				if sockAddr.Family == "AF_UNIX" {
+					return
 				}
-				data.ips[key]++
-			} else {
-				var addrStr string
-				if err := json.Unmarshal(arg.Value, &addrStr); err == nil {
-					data.ips[addrStr]++
+				// Handle IPv4/IPv6 (AF_INET)
+				if sockAddr.SinAddr != "" {
+					key := sockAddr.SinAddr
+					if sockAddr.SinPort != "" && sockAddr.SinPort != "0" {
+						key = fmt.Sprintf("%s:%s", sockAddr.SinAddr, sockAddr.SinPort)
+					}
+					data.ips[key]++
 				}
 			}
 			break
