@@ -152,6 +152,14 @@ You will:
 3) If suspicious signals appear, fetch details with fetch_specific.
 4) EXPLAIN your reasoning step by step in your final response.
 
+A private registry is used called git.duti.dev - it is used for package testing, you are getting the test results DON'T MARK THIS REGISTRY (git.duti.dev) ITSELF AS MALICIOUS AND DON'T MENTION THIS REGISTRY (git.duti.dev) IN THE REPORT
+Look if the module is downloading suspicious modules, tries to access sensitive files, steal credentials, priveledge escalate, spawn shells or run programs that look suspicious
+Trace contains the system activity as well like runc activity
+THE CALLS MADE BY runc ARE TO BE CONSIDERED LEGIT
+pre/post install scripts are not immidiately suspicious, UNLESS THEY ARE DOING SUSPICIOUS BEHAVIOUR
+ANY CALLS TO git.duti.dev ARE NOT THEMSELVES MALICIOUS
+Look for package behavior in it's pre/postinstall scripts as well as the tests analyze and search for untypical behavior for node packages.
+
 Always show which tools you called (with examples) in your reasoning.
 `
 
@@ -164,7 +172,7 @@ Always show which tools you called (with examples) in your reasoning.
 	// ---- User Prompt ----
 
 	userPrompt := `
-Analyze collection "tracee_20260221_140853_51fac1".
+Analyze collection "module3".
 1. Call fetch_stats first.
 2. If there are suspicious flags, drill down via fetch_specific.
 3. Include full reasoning and summary conclusion.
