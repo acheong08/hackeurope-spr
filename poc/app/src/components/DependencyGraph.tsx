@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   ReactFlow,
   Controls,
@@ -6,16 +7,35 @@ import {
   type Edge,
   type OnNodesChange,
   OnEdgesChange,
+  useReactFlow,
 } from "@xyflow/react";
 import { Progress } from "./ui/progress";
 
-interface DependencyGraph {
+interface DependencyGraphProps {
   progress: number;
   onNodeClick: (nodeId: string) => void;
   nodes: Node[];
   edges: Edge[];
   onNodesChange: OnNodesChange<Node>;
   onEdgesChange: OnEdgesChange<Edge>;
+  showDirectOnly: boolean;
+  onToggleDirectOnly: () => void;
+  directDepCount: number;
+  totalDepCount: number;
+}
+
+// Component to handle fit view when filter changes - must be inside ReactFlow
+function FitViewOnChange({ showDirectOnly }: { showDirectOnly: boolean }) {
+  const { fitView } = useReactFlow();
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fitView({ padding: 0.2, duration: 500 });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [showDirectOnly, fitView]);
+  
+  return null;
 }
 
 export function DependencyGraph({
@@ -25,7 +45,11 @@ export function DependencyGraph({
   edges,
   onNodesChange,
   onEdgesChange,
-}: DependencyGraph) {
+  showDirectOnly,
+  onToggleDirectOnly,
+  directDepCount,
+  totalDepCount,
+}: DependencyGraphProps) {
   return (
     <div className="h-full flex flex-col">
       <div
@@ -35,9 +59,25 @@ export function DependencyGraph({
           background: "#111827",
         }}
       >
-        <h2 className="text-lg mb-3" style={{ color: "#22c55e" }}>
-          Dependency Analysis
-        </h2>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg" style={{ color: "#22c55e" }}>
+            Dependency Analysis
+          </h2>
+          <button
+            onClick={onToggleDirectOnly}
+            className="px-3 py-1.5 text-xs rounded border transition-colors cursor-pointer"
+            style={{
+              background: showDirectOnly ? "#22c55e" : "transparent",
+              color: showDirectOnly ? "#000" : "#22c55e",
+              borderColor: "#22c55e",
+            }}
+          >
+            {showDirectOnly 
+              ? `Show All (${totalDepCount})` 
+              : `Show Direct Only (${directDepCount})`
+            }
+          </button>
+        </div>
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span style={{ color: "#9ca3af" }}>Progress</span>
@@ -82,8 +122,12 @@ export function DependencyGraph({
           onEdgesChange={onEdgesChange}
           onNodeClick={(_, node: Node) => onNodeClick(node.id)}
           fitView
+          fitViewOptions={{ padding: 0.2, duration: 800 }}
+          minZoom={0.1}
+          maxZoom={2}
           style={{ background: "#0a0a0a" }}
         >
+          <FitViewOnChange showDirectOnly={showDirectOnly} />
           <Background gap={16} />
           <Controls />
         </ReactFlow>

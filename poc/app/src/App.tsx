@@ -73,6 +73,12 @@ export default function App() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  
+  // Store full graph data for filtering
+  const [allNodes, setAllNodes] = useState<Node[]>([]);
+  const [allEdges, setAllEdges] = useState<Edge[]>([]);
+  const [directDependencyIds, setDirectDependencyIds] = useState<Set<string>>(new Set());
+  const [showDirectOnly, setShowDirectOnly] = useState(false);
 
   const { send, subscribe, isConnected } = useContext(SocketContext);
 
@@ -87,6 +93,19 @@ export default function App() {
             nodes: PackageNode[];
             edge_count: number;
           };
+          
+          // Find root node and extract direct dependencies
+          const rootNode = payload.nodes.find(n => n.id === payload.root_package.id);
+          const directDeps = new Set<string>();
+          if (rootNode && rootNode.dependencies) {
+            Object.keys(rootNode.dependencies).forEach(depName => {
+              const depNode = payload.nodes.find(n => n.name === depName);
+              if (depNode) {
+                directDeps.add(depNode.id);
+              }
+            });
+          }
+          setDirectDependencyIds(directDeps);
           
           // Build nodes from DAG
           const newNodes: Node[] = payload.nodes.map((pkg) => ({
@@ -119,10 +138,15 @@ export default function App() {
             }
           });
 
+          // Store full graph data
+          setAllNodes(newNodes);
+          setAllEdges(newEdges);
+
           // Layout the graph
           const layoutedNodes = getLayoutedElements(newNodes, newEdges);
           setNodes(layoutedNodes);
           setEdges(newEdges);
+          setShowDirectOnly(false);
           
           addLog(`✓ DAG received: ${payload.nodes.length} packages, ${newEdges.length} dependencies`);
           break;
@@ -136,7 +160,22 @@ export default function App() {
         
         case "package_status": {
           const payload = msg.payload as { package_id: string; name: string; version: string; status: string };
-          // Update node styling based on status
+          // Update style in allNodes
+          setAllNodes((currentAllNodes) =>
+            currentAllNodes.map((node) => {
+              if (node.id === payload.package_id) {
+                const style =
+                  payload.status === "complete"
+                    ? safePkgStyle
+                    : payload.status === "failed"
+                    ? flaggedPkgStyle
+                    : dataGatheringPkgStyle;
+                return { ...node, style };
+              }
+              return node;
+            })
+          );
+          // Also update visible nodes
           setNodes((currentNodes) =>
             currentNodes.map((node) => {
               if (node.id === payload.package_id) {
@@ -215,6 +254,10 @@ export default function App() {
     setSelectedTab(Tab.LOGS);
     setNodes([]);
     setEdges([]);
+    setAllNodes([]);
+    setAllEdges([]);
+    setDirectDependencyIds(new Set());
+    setShowDirectOnly(false);
 
     // Send analyze request
     addLog("→ Starting analysis...");
@@ -276,6 +319,35 @@ export default function App() {
     setPackageContent("");
   };
 
+  // Toggle between showing all dependencies or only direct ones
+  const handleToggleDirectOnly = () => {
+    const newShowDirectOnly = !showDirectOnly;
+    setShowDirectOnly(newShowDirectOnly);
+    
+    if (newShowDirectOnly) {
+      // Filter to show only root and direct dependencies
+      const rootId = allNodes.find(n => n.id.includes("root@"))?.id;
+      const visibleIds = new Set([rootId, ...directDependencyIds].filter(Boolean) as string[]);
+      
+      const filteredNodes = allNodes.filter(n => visibleIds.has(n.id));
+      const filteredEdges = allEdges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
+      
+      // Re-layout the filtered graph
+      const layoutedNodes = getLayoutedElements(filteredNodes, filteredEdges);
+      setNodes(layoutedNodes);
+      setEdges(filteredEdges);
+      
+      addLog(`→ Showing ${filteredNodes.length} direct dependencies`);
+    } else {
+      // Show all dependencies
+      const layoutedNodes = getLayoutedElements(allNodes, allEdges);
+      setNodes(layoutedNodes);
+      setEdges(allEdges);
+      
+      addLog(`→ Showing all ${allNodes.length} dependencies`);
+    }
+  };
+
   return (
     <div
       className="h-screen flex flex-col"
@@ -303,6 +375,10 @@ export default function App() {
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
+                showDirectOnly={showDirectOnly}
+                onToggleDirectOnly={handleToggleDirectOnly}
+                directDepCount={directDependencyIds.size}
+                totalDepCount={allNodes.length}
               />
             </div>
           </ResizablePanel>

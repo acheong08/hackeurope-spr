@@ -116,6 +116,7 @@ func (p *Pipeline) Run(ctx context.Context, packageJSONContent string) error {
 	}
 	p.sender.SendProgress(40, "upload", "Packages uploaded successfully")
 
+	panic("STOP")
 	// Step 3: Run behavioral analysis workflows (40% - 80%)
 	if len(directDeps) > 0 {
 		p.sender.SendProgress(40, "workflow", fmt.Sprintf("Starting analysis of %d packages...", len(directDeps)))
