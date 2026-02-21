@@ -1,0 +1,44 @@
+/* ReactFlow custom styling for cyber theme */
+
+.react-flow__controls {
+  display: flex;
+  gap: 4px;
+}
+
+.react-flow__controls-button {
+  background: #374151 !important;
+  border: 1px solid #22c55e !important;
+  color: #22c55e !important;
+  transition: all 0.2s;
+}
+
+.react-flow__controls-button:hover {
+  background: #22c55e !important;
+  color: #000 !important;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+/* Light mode overrides */
+body:not(.dark) .react-flow__controls-button {
+  background: #e5e7eb !important;
+  border: 1px solid #16a34a !important;
+  color: #16a34a !important;
+}
+
+body:not(.dark) .react-flow__controls-button:hover {
+  background: #16a34a !important;
+  color: #fff !important;
+}
+
+/* Edge styling */
+.react-flow__edge-path {
+  stroke: #22c55e;
+  stroke-width: 2;
+}
+
+body:not(.dark) .react-flow__edge-path {
+  stroke: #16a34a;
+}
