@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/openai"
+	"charm.land/fantasy/providers/openaicompat"
 )
 
 // ---------------- Tool: fetch_stats ----------------
@@ -78,13 +78,13 @@ func main() {
 		return
 	}
 
-	provider, err := openai.New(openai.WithAPIKey(apiKey))
+	provider, err := openaicompat.New(openaicompat.WithBaseURL("https://api.synthetic.new/openai/v1"), openaicompat.WithAPIKey(apiKey))
 	if err != nil {
 		panic(err)
 	}
 
 	ctx := context.Background()
-	model, err := provider.LanguageModel(ctx, "gpt-4.1")
+	model, err := provider.LanguageModel(ctx, "hf:moonshotai/Kimi-K2.5")
 	if err != nil {
 		panic(err)
 	}
