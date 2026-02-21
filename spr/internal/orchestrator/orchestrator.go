@@ -53,7 +53,6 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 
 	// Create a cancellable context for early termination
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	// Create channels for work distribution and result collection
 	workChan := make(chan models.Package, len(packages))
@@ -67,13 +66,14 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 
 	// Create worker pool
 	var wg sync.WaitGroup
+	var copyWg sync.WaitGroup
 	semaphore := make(chan struct{}, o.concurrency)
 
 	for i := 0; i < o.concurrency; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			o.worker(ctx, cancel, workerID, workChan, resultChan, semaphore, tempDir, outputDir)
+			o.worker(ctx, cancel, workerID, workChan, resultChan, semaphore, tempDir, outputDir, &copyWg)
 		}(i)
 	}
 
@@ -87,13 +87,17 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 	var results []PackageResult
 	completed := 0
 	failed := 0
+	hasFailure := false
 
 	for result := range resultChan {
 		completed++
 		if result.Error != nil {
 			failed++
-			// Cancel context on first failure (fail-fast)
-			cancel()
+			if !hasFailure {
+				hasFailure = true
+				// Cancel context on first failure (fail-fast)
+				cancel()
+			}
 		}
 		results = append(results, result)
 		fmt.Printf("  [%d/%d] %s@%s - ", completed, len(packages), result.Package.Name, result.Package.Version)
@@ -112,11 +116,17 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 	}
 
 	fmt.Printf("\nCompleted analysis: %d/%d packages successful\n", len(packages)-failed, len(packages))
+
+	// Wait for all artifact copy goroutines to complete
+	fmt.Printf("Waiting for artifact copies to complete...\n")
+	copyWg.Wait()
+	fmt.Printf("All artifacts copied successfully\n")
+
 	return results, nil
 }
 
 // worker processes packages from the work channel
-func (o *Orchestrator) worker(ctx context.Context, cancel context.CancelFunc, workerID int, workChan <-chan models.Package, resultChan chan<- PackageResult, semaphore chan struct{}, tempDir string, outputDir string) {
+func (o *Orchestrator) worker(ctx context.Context, cancel context.CancelFunc, workerID int, workChan <-chan models.Package, resultChan chan<- PackageResult, semaphore chan struct{}, tempDir string, outputDir string, copyWg *sync.WaitGroup) {
 	for pkg := range workChan {
 		// Check if context is cancelled before acquiring semaphore
 		select {
@@ -131,7 +141,7 @@ func (o *Orchestrator) worker(ctx context.Context, cancel context.CancelFunc, wo
 		}
 
 		semaphore <- struct{}{} // Acquire
-		result := o.analyzePackage(ctx, pkg, tempDir, outputDir)
+		result := o.analyzePackage(ctx, pkg, tempDir, outputDir, copyWg)
 		<-semaphore // Release
 
 		resultChan <- result
@@ -139,7 +149,7 @@ func (o *Orchestrator) worker(ctx context.Context, cancel context.CancelFunc, wo
 }
 
 // analyzePackage triggers workflow, polls for completion, and downloads artifacts
-func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, tempDir string, outputDir string) PackageResult {
+func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, tempDir string, outputDir string, copyWg *sync.WaitGroup) PackageResult {
 	result := PackageResult{
 		Package: pkg,
 	}
@@ -181,7 +191,10 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 
 	// 5. Copy artifacts to output directory immediately (non-blocking, with context cancellation)
 	if len(artifacts) > 0 && outputDir != "" {
+		copyWg.Add(1)
 		go func(ctx context.Context, artifactPaths []string, pkgName, pkgVersion string) {
+			defer copyWg.Done()
+
 			// Check if context is cancelled before starting
 			select {
 			case <-ctx.Done():
