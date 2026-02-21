@@ -3,29 +3,28 @@ import { createContext, useState, useEffect, useCallback, useRef } from "react";
 export interface WebSocketMessage {
   type: string;
   payload: any;
-  _id?: string; // Internal ID for deduplication
+  _id?: number; // Internal ID for deduplication (incrementing counter)
 }
 
 interface SocketContextType {
   socket: WebSocket | null;
   isConnected: boolean;
   send: (message: any) => void;
-  lastMessage: WebSocketMessage | null;
+  subscribe: (callback: (message: WebSocketMessage) => void) => () => void;
 }
 
 export const SocketContext = createContext<SocketContextType>({
   socket: null,
   isConnected: false,
   send: () => {},
-  lastMessage: null,
+  subscribe: () => () => {},
 });
 
 function SocketProvider({ children }: { children?: React.ReactNode }) {
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const messageIdRef = useRef(0);
-  const processedMessages = useRef<Set<string>>(new Set());
+  const subscribersRef = useRef<Set<(message: WebSocketMessage) => void>>(new Set());
 
   useEffect(() => {
     // Connect to local server
@@ -38,11 +37,18 @@ function SocketProvider({ children }: { children?: React.ReactNode }) {
     
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        // Add unique ID to each message for deduplication
-        const id = `${data.type}-${Date.now()}-${messageIdRef.current++}`;
-        data._id = id;
-        setLastMessage(data);
+        const data = JSON.parse(event.data) as WebSocketMessage;
+        // Add unique incrementing ID to each message for deduplication
+        data._id = ++messageIdRef.current;
+        
+        // Notify all subscribers immediately
+        subscribersRef.current.forEach((callback) => {
+          try {
+            callback(data);
+          } catch (err) {
+            console.error("Subscriber error:", err);
+          }
+        });
       } catch (err) {
         console.error("Failed to parse message:", err);
       }
@@ -72,8 +78,16 @@ function SocketProvider({ children }: { children?: React.ReactNode }) {
     }
   }, [socket]);
 
+  const subscribe = useCallback((callback: (message: WebSocketMessage) => void) => {
+    subscribersRef.current.add(callback);
+    // Return unsubscribe function
+    return () => {
+      subscribersRef.current.delete(callback);
+    };
+  }, []);
+
   return (
-    <SocketContext.Provider value={{ socket, isConnected, send, lastMessage }}>
+    <SocketContext.Provider value={{ socket, isConnected, send, subscribe }}>
       {children}
     </SocketContext.Provider>
   );

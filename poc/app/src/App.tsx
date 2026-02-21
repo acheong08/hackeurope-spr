@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useRef } from "react";
+import { useState, useEffect, useContext } from "react";
 import { DependencyGraph } from "./components/DependencyGraph";
 import { Terminal } from "./components/Terminal";
 import { Analysis } from "./components/Analysis";
@@ -74,118 +74,123 @@ export default function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  const { send, lastMessage, isConnected } = useContext(SocketContext);
-  const processedMessageIds = useRef<Set<string>>(new Set());
+  const { send, subscribe, isConnected } = useContext(SocketContext);
 
-  // Listen for WebSocket messages
+  // Subscribe to WebSocket messages
   useEffect(() => {
-    if (!lastMessage) return;
-    
-    // Skip if we've already processed this message
-    if (lastMessage._id && processedMessageIds.current.has(lastMessage._id)) {
-      return;
-    }
-    
-    // Mark message as processed
-    if (lastMessage._id) {
-      processedMessageIds.current.add(lastMessage._id);
-    }
+    const handleMessage = (msg: { type: string; payload: any }) => {
+      switch (msg.type) {
+        case "dag": {
+          // Received DAG data - build the graph
+          const payload = msg.payload as {
+            root_package: { ID: string; Name: string; Version: string };
+            nodes: PackageNode[];
+            edge_count: number;
+          };
+          
+          // Build nodes from DAG
+          const newNodes: Node[] = payload.nodes.map((pkg) => ({
+            id: pkg.ID,
+            type: "default",
+            data: { label: `${pkg.Name}@${pkg.Version}` },
+            position: { x: 0, y: 0 },
+            style: dataGatheringPkgStyle,
+          }));
 
-    switch (lastMessage.type) {
-      case "dag": {
-        // Received DAG data - build the graph
-        const payload = lastMessage.payload as {
-          root_package: { ID: string; Name: string; Version: string };
-          nodes: PackageNode[];
-          edge_count: number;
-        };
-        
-        // Build nodes from DAG
-        const newNodes: Node[] = payload.nodes.map((pkg) => ({
-          id: pkg.ID,
-          type: "default",
-          data: { label: `${pkg.Name}@${pkg.Version}` },
-          position: { x: 0, y: 0 },
-          style: dataGatheringPkgStyle,
-        }));
-
-        // Build edges from dependencies
-        const newEdges: Edge[] = [];
-        const rootId = payload.root_package.ID;
-        
-        payload.nodes.forEach((pkg) => {
-          // Check if this package is a direct dependency of root
-          if (pkg.Dependencies && Object.keys(pkg.Dependencies).length > 0) {
-            // This is likely the root or has deps
-            Object.entries(pkg.Dependencies).forEach(([depName]) => {
-              // Find the dependent node
-              const dependentNode = payload.nodes.find(n => n.Name === depName);
-              if (dependentNode) {
-                newEdges.push({
-                  id: `${pkg.ID}-${dependentNode.ID}`,
-                  source: pkg.ID,
-                  target: dependentNode.ID,
-                  markerEnd: { type: MarkerType.ArrowClosed },
-                });
-              }
-            });
-          }
-        });
-
-        // Layout the graph
-        const layoutedNodes = getLayoutedElements(newNodes, newEdges);
-        setNodes(layoutedNodes);
-        setEdges(newEdges);
-        
-        addLog(`✓ DAG received: ${payload.nodes.length} packages, ${newEdges.length} dependencies`);
-        break;
-      }
-      
-      case "progress": {
-        const payload = lastMessage.payload as { percent: number; stage: string; message: string };
-        setProgress(payload.percent);
-        break;
-      }
-      
-      case "package_status": {
-        const payload = lastMessage.payload as { package_id: string; status: string };
-        // Update node styling based on status
-        setNodes((currentNodes) =>
-          currentNodes.map((node) => {
-            if (node.id === payload.package_id) {
-              const style =
-                payload.status === "complete"
-                  ? safePkgStyle
-                  : payload.status === "failed"
-                  ? flaggedPkgStyle
-                  : dataGatheringPkgStyle;
-              return { ...node, style };
+          // Build edges from dependencies
+          const newEdges: Edge[] = [];
+          
+          payload.nodes.forEach((pkg) => {
+            // Check if this package is a direct dependency of root
+            if (pkg.Dependencies && Object.keys(pkg.Dependencies).length > 0) {
+              // This is likely the root or has deps
+              Object.entries(pkg.Dependencies).forEach(([depName]) => {
+                // Find the dependent node
+                const dependentNode = payload.nodes.find(n => n.Name === depName);
+                if (dependentNode) {
+                  newEdges.push({
+                    id: `${pkg.ID}-${dependentNode.ID}`,
+                    source: pkg.ID,
+                    target: dependentNode.ID,
+                    markerEnd: { type: MarkerType.ArrowClosed },
+                  });
+                }
+              });
             }
-            return node;
-          })
-        );
-        break;
-      }
-      
-      case "complete": {
-        const payload = lastMessage.payload as { success: boolean; message: string };
-        if (payload.success) {
-          addLog(`✓ ${payload.message}`);
-        } else {
-          addLog(`✗ ${payload.message}`);
+          });
+
+          // Layout the graph
+          const layoutedNodes = getLayoutedElements(newNodes, newEdges);
+          setNodes(layoutedNodes);
+          setEdges(newEdges);
+          
+          addLog(`✓ DAG received: ${payload.nodes.length} packages, ${newEdges.length} dependencies`);
+          break;
         }
-        setIsAnalyzing(false);
-        break;
+        
+        case "progress": {
+          const payload = msg.payload as { percent: number; stage: string; message: string };
+          setProgress(payload.percent);
+          break;
+        }
+        
+        case "package_status": {
+          const payload = msg.payload as { package_id: string; name: string; version: string; status: string };
+          // Update node styling based on status
+          setNodes((currentNodes) =>
+            currentNodes.map((node) => {
+              if (node.id === payload.package_id) {
+                const style =
+                  payload.status === "complete"
+                    ? safePkgStyle
+                    : payload.status === "failed"
+                    ? flaggedPkgStyle
+                    : dataGatheringPkgStyle;
+                return { ...node, style };
+              }
+              return node;
+            })
+          );
+          // Log status change
+          const statusIcon = payload.status === "complete" ? "✓" : 
+                            payload.status === "failed" ? "✗" : "→";
+          addLog(`${statusIcon} ${payload.name}@${payload.version}: ${payload.status}`);
+          break;
+        }
+        
+        case "complete": {
+          const payload = msg.payload as { success: boolean; message: string };
+          if (payload.success) {
+            addLog(`✓ ${payload.message}`);
+          } else {
+            addLog(`✗ ${payload.message}`);
+          }
+          setIsAnalyzing(false);
+          break;
+        }
+        
+        case "error": {
+          const payload = msg.payload as { message: string };
+          addLog(`✗ Error: ${payload.message}`);
+          setIsAnalyzing(false);
+          break;
+        }
+        
+        case "log": {
+          const payload = msg.payload as { message: string; level?: string };
+          const prefix = payload.level === "success" ? "✓ " : 
+                         payload.level === "warning" ? "⚠ " : 
+                         payload.level === "error" ? "✗ " : 
+                         payload.level === "info" ? "→ " : "";
+          addLog(`${prefix}${payload.message}`);
+          break;
+        }
       }
-      
-      case "error": {
-        const payload = lastMessage.payload as { message: string };
-        addLog(`✗ Error: ${payload.message}`);
-        setIsAnalyzing(false);
-        break;
-      }
-    }
-  }, [lastMessage]);
+    };
+
+    const unsubscribe = subscribe(handleMessage);
+    return unsubscribe;
+  }, [subscribe]);
 
   const startAnalysis = () => {
     if (isAnalyzing) {
@@ -210,9 +215,6 @@ export default function App() {
     setSelectedTab(Tab.LOGS);
     setNodes([]);
     setEdges([]);
-    
-    // Clear processed message IDs for new analysis
-    processedMessageIds.current.clear();
 
     // Send analyze request
     addLog("→ Starting analysis...");
@@ -384,7 +386,7 @@ export default function App() {
                 )}
               </div>
               {selectedTab == Tab.LOGS ? (
-                <Terminal logs={logs} addLog={addLog} />
+                <Terminal logs={logs} />
               ) : selectedTab == Tab.ANALYSIS ? (
                 <Analysis selectedNode={selectedNode} />
               ) : 

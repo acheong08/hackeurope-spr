@@ -1,14 +1,11 @@
-import { useEffect, useRef, useContext } from "react";
-import { SocketContext } from "../providers/SocketProvider";
+import { useEffect, useRef } from "react";
 
 interface TerminalProps {
   logs: string[];
-  addLog: (log: string) => void;
 }
 
-export function Terminal({ logs, addLog }: TerminalProps) {
+export function Terminal({ logs }: TerminalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { lastMessage } = useContext(SocketContext);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -32,18 +29,6 @@ export function Terminal({ logs, addLog }: TerminalProps) {
     }
     return "#4ade80";
   };
-
-  // Listen for log messages from WebSocket
-  useEffect(() => {
-    if (lastMessage && lastMessage.type === "log") {
-      const payload = lastMessage.payload as { message: string; level?: string };
-      const prefix = payload.level === "success" ? "✓ " : 
-                      payload.level === "warning" ? "⚠ " : 
-                      payload.level === "error" ? "✗ " : 
-                      payload.level === "info" ? "→ " : "";
-      addLog(`${prefix}${payload.message}`);
-    }
-  }, [lastMessage, addLog]);
 
   return (
     <div className="h-full flex flex-col">
