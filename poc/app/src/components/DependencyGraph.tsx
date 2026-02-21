@@ -46,7 +46,7 @@ export function DependencyGraph({ progress }: DependencyGraph) {
       position: { x: 0, y: 0 },
       style: newDependency.flagged ? flaggedPkgStyle : safePkgStyle,
     };
-
+    
     let newEdge: Edge | null = null;
     if (newDependency.dependent) {
       newEdge = {
