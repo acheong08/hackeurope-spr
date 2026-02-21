@@ -1,0 +1,10 @@
+{
+  "name": "{{.Name}}",
+  "version": "{{.Version}}",
+  "description": "Prototype pollution test for {{.PackageName}}@{{.PackageVersion}}",
+  "private": true,
+  "type": "{{.ModuleType}}",
+  "dependencies": {
+    "{{.PackageName}}": "{{.PackageVersion}}"
+  }
+}

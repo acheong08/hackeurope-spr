@@ -1,0 +1,179 @@
+# POC Workflow: Tracee Runtime Analysis
+# 
+# This workflow demonstrates capturing system calls during npm package execution
+# using Tracee eBPF-based monitoring with container isolation.
+#
+# Security: Package runs in isolated container while Tracee runs on host,
+# preventing malicious code from tampering with output files.
+#
+# Flow:
+# 1. Downloads and extracts Tracee CLI binary
+# 2. Creates isolated Docker container for package analysis
+# 3. Gets container PID and starts Tracee scoped to container
+# 4. Copies package into container and installs dependencies
+# 5. Runs dev server with polling
+# 6. Stops Tracee and uploads captured events (from host, secure)
+
+name: Tracee POC - Demo Package Analysis
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'poc/demo-package/**'
+      - '.github/workflows/tracee-poc.yml'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download and setup Tracee
+        run: |
+          echo "Downloading Tracee CLI..."
+          wget -q https://github.com/aquasecurity/tracee/releases/download/v0.24.1/tracee-x86_64.v0.24.1.tar.gz
+          echo "Extracting Tracee..."
+          tar -xzf tracee-x86_64.v0.24.1.tar.gz
+          mkdir -p /tmp/tracee-out
+          echo "Tracee ready"
+
+      - name: Create isolated container
+        run: |
+          echo "Creating isolated container..."
+          # Create container with host network for simplicity (npm install needs network)
+          # Use sleep to keep container running while we get PID and start Tracee
+          docker run -d --name analysis --network host node:20 sleep 3600
+          
+          # Get container PID for Tracee scoping
+          CONTAINER_PID=$(docker inspect analysis --format '{{.State.Pid}}')
+          echo "Container PID: $CONTAINER_PID"
+          echo "CONTAINER_PID=$CONTAINER_PID" >> $GITHUB_ENV
+
+      - name: Copy package to container
+        run: |
+          echo "Copying package to container..."
+          # Create package directory in container
+          docker exec analysis mkdir -p /package
+          # Copy files (avoid node_modules)
+          docker cp poc/demo-package/. analysis:/package/
+          echo "Package copied to container"
+
+      - name: Start Tracee
+        run: |
+          echo "Starting Tracee to capture all container activity..."
+          # Ensure tracee install directory exists with proper permissions
+          sudo mkdir -p /tmp/tracee-work
+          sudo chmod 777 /tmp/tracee-work
+          
+          # Run Tracee scoped to containers (captures security-relevant events)
+          # Focused on: process execution, file access, network connections, DNS queries
+          sudo ./dist/tracee \
+            --install-path /tmp/tracee-work \
+            --scope container \
+            --events execve,execveat,open,openat,connect,net_packet_dns_request \
+            --output json:/tmp/tracee-out/trace-output.jsonl &
+          TRACEE_PID=$!
+          echo "Tracee started with PID: $TRACEE_PID"
+          echo "TRACEE_PID=$TRACEE_PID" >> $GITHUB_ENV
+          
+          # Give Tracee time to initialize eBPF programs
+          echo "Waiting for Tracee to initialize..."
+          sleep 5
+          
+          # Verify Tracee is running
+          if ps -p $TRACEE_PID > /dev/null; then
+            echo "Tracee is running and capturing container activity"
+          else
+            echo "ERROR: Tracee failed to start"
+            exit 1
+          fi
+
+      - name: Install dependencies in container
+        run: |
+          echo "Installing dependencies in container..."
+          docker exec analysis sh -c "cd /package && npm install"
+          echo "Dependencies installed (Tracee captured postinstall scripts)"
+
+      - name: Run dev server in container with polling
+        run: |
+          echo "Starting dev server in container..."
+          docker exec -d analysis sh -c "cd /package && npm run dev"
+          
+          # Wait for server to be ready
+          MAX_WAIT=30
+          WAITED=0
+          SERVER_READY=0
+          
+          while [ $WAITED -lt $MAX_WAIT ]; do
+            sleep 1
+            WAITED=$((WAITED + 1))
+            
+            # Try to curl the server
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 2>/dev/null | grep -q "200\|404"; then
+              echo "Server responded after ${WAITED} seconds!"
+              SERVER_READY=1
+              break
+            fi
+            
+            echo "Waiting... ($WAITED/${MAX_WAIT}s)"
+          done
+          
+          if [ $SERVER_READY -eq 1 ]; then
+            echo "Server is up, stopping early..."
+          else
+            echo "Timeout reached (${MAX_WAIT}s)"
+          fi
+          
+          # Stop the dev server in container
+          docker exec analysis sh -c "pkill -f 'npm run dev'" || echo "Process already stopped or not found"
+          echo "Dev server stopped"
+
+      - name: Stop Tracee and collect results
+        run: |
+          echo "Stopping Tracee (PID: $TRACEE_PID)..."
+          sudo kill $TRACEE_PID 2>/dev/null || true
+          wait $TRACEE_PID 2>/dev/null || true
+          sleep 2
+          
+          # Fix permissions on output directory for artifact upload
+          sudo chmod -R 777 /tmp/tracee-out/
+          
+          echo "Tracee output contents:"
+          ls -la /tmp/tracee-out/ || echo "No output directory"
+          
+          if [ -f /tmp/tracee-out/trace-output.jsonl ]; then
+            echo "Tracee captured $(wc -l < /tmp/tracee-out/trace-output.jsonl) events"
+            echo "First 20 events:"
+            head -20 /tmp/tracee-out/trace-output.jsonl || true
+          else
+            echo "No tracee output file found"
+          fi
+
+      - name: Cleanup container
+        if: always()
+        run: |
+          echo "Cleaning up container..."
+          docker stop analysis 2>/dev/null || true
+          docker rm analysis 2>/dev/null || true
+          echo "Cleanup complete"
+
+      - name: Upload Tracee results
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracee-results-${{ github.run_id }}
+          path: /tmp/tracee-out/trace-output.jsonl
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload additional debug info
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-info-${{ github.run_id }}
+          path: |
+            /tmp/tracee-out/
+            dist/
+          if-no-files-found: ignore
+          retention-days: 7

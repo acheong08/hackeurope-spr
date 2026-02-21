@@ -1,0 +1,9 @@
+{
+  "name": "{{.Name}}",
+  "version": "{{.Version}}",
+  "description": "Install-time behavior test for {{.PackageName}}@{{.PackageVersion}}",
+  "private": true,
+  "dependencies": {
+    "{{.PackageName}}": "{{.PackageVersion}}"
+  }
+}

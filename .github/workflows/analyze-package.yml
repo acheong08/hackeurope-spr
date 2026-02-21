@@ -1,0 +1,204 @@
+name: Analyze Package Behavior
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package name (e.g., lodash)'
+        required: true
+        type: string
+      version:
+        description: 'Package version (e.g., 4.17.21)'
+        required: true
+        type: string
+
+env:
+  REGISTRY_URL: https://git.duti.dev/api/packages/acheong08/npm/
+  TRACEE_VERSION: v0.24.1
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build spr CLI
+        run: |
+          cd spr
+          go build -o spr ./cmd/spr/
+          echo "✅ spr CLI built successfully"
+
+      - name: Validate inputs
+        run: |
+          # Basic validation - just check inputs are not empty
+          if [[ -z "${{ inputs.package }}" ]]; then
+            echo "❌ ERROR: Package name cannot be empty"
+            exit 1
+          fi
+          if [[ -z "${{ inputs.version }}" ]]; then
+            echo "❌ ERROR: Version cannot be empty"
+            exit 1
+          fi
+          echo "✅ Input validation passed: ${{ inputs.package }}@${{ inputs.version }}"
+
+      - name: Generate test package
+        run: |
+          ./spr/spr test generate \
+            --package "${{ inputs.package }}" \
+            --version "${{ inputs.version }}" \
+            --output ./test-pkg
+          echo "✅ Test package generated"
+          ls -la ./test-pkg/
+
+      - name: Set normalized package name
+        id: normalize
+        run: |
+          # Normalize package name for directory lookups (matches generator logic)
+          pkg_name="${{ inputs.package }}"
+          if [[ "$pkg_name" == @*/* ]]; then
+            # @scope/name → scope-name
+            normalized="${pkg_name/@/}"
+            normalized="${normalized//\//-}"
+          else
+            normalized="$pkg_name"
+          fi
+          echo "normalized=$normalized" >> $GITHUB_OUTPUT
+          echo "✅ Normalized: $pkg_name → $normalized"
+
+      - name: Download and setup Tracee
+        run: |
+          echo "Downloading Tracee CLI..."
+          wget -q "https://github.com/aquasecurity/tracee/releases/download/${{ env.TRACEE_VERSION }}/tracee-x86_64.${{ env.TRACEE_VERSION }}.tar.gz"
+          echo "Extracting Tracee..."
+          tar -xzf "tracee-x86_64.${{ env.TRACEE_VERSION }}.tar.gz"
+          mkdir -p /tmp/tracee-out
+          echo "✅ Tracee ready"
+
+      - name: Create isolated container
+        run: |
+          echo "Creating isolated container..."
+          docker run -d --name analysis \
+            --network host \
+            -e NPM_CONFIG_REGISTRY=${{ env.REGISTRY_URL }} \
+            node:20 sleep 3600
+          
+          echo "✅ Container created"
+
+      - name: Start Tracee monitoring
+        run: |
+          echo "Starting Tracee to capture container activity..."
+          # Ensure tracee install directory exists with proper permissions
+          sudo mkdir -p /tmp/tracee-work
+          sudo chmod 777 /tmp/tracee-work
+          
+          # Run Tracee scoped to container
+          sudo ./dist/tracee \
+            --install-path /tmp/tracee-work \
+            --scope container \
+            --events execve,execveat,open,openat,connect,net_packet_dns_request \
+            --output json:/tmp/tracee-out/behavior.jsonl &
+          
+          TRACEE_PID=$!
+          echo "Tracee started with PID: $TRACEE_PID"
+          echo "TRACEE_PID=$TRACEE_PID" >> $GITHUB_ENV
+          
+          # Give Tracee time to initialize eBPF programs
+          echo "Waiting for Tracee to initialize..."
+          sleep 5
+          
+          # Verify Tracee is running
+          if ps -p $TRACEE_PID > /dev/null; then
+            echo "✅ Tracee is running and capturing container activity"
+          else
+            echo "❌ ERROR: Tracee failed to start"
+            exit 1
+          fi
+
+      - name: Run install test
+        run: |
+          echo "=== Running Install Test ==="
+          docker exec analysis mkdir -p /test
+          docker cp ./test-pkg/${{ steps.normalize.outputs.normalized }}@${{ inputs.version }}/install/. analysis:/test/
+          docker exec analysis sh -c "cd /test && npm install" || echo "⚠️ Install test completed with exit code $?"
+          echo "✅ Install test finished"
+
+      - name: Run import test
+        run: |
+          echo "=== Running Import Test ==="
+          docker cp ./test-pkg/${{ steps.normalize.outputs.normalized }}@${{ inputs.version }}/import/. analysis:/test/
+          docker exec analysis sh -c "cd /test && node index.js" || echo "⚠️ Import test completed with exit code $?"
+          echo "✅ Import test finished"
+
+      - name: Run prototype pollution test
+        run: |
+          echo "=== Running Prototype Pollution Test ==="
+          docker cp ./test-pkg/${{ steps.normalize.outputs.normalized }}@${{ inputs.version }}/prototype/. analysis:/test/
+          docker exec analysis sh -c "cd /test && node test-prototype.js" || echo "⚠️ Prototype test completed with exit code $?"
+          echo "✅ Prototype test finished"
+
+      - name: Run CLI test (if applicable)
+        run: |
+          if [ -d "./test-pkg/${{ steps.normalize.outputs.normalized }}@${{ inputs.version }}/cli" ]; then
+            echo "=== Running CLI Test ==="
+            echo "Testing CLI via npx with --version flag..."
+            docker exec analysis sh -c "cd /test && timeout 30s npx ${{ inputs.package }} --version" || echo "⚠️ CLI test completed with exit code $?"
+            echo "✅ CLI test finished"
+          else
+            echo "ℹ️ No CLI test (package has no bin entry)"
+          fi
+
+      - name: Stop Tracee and collect results
+        if: always()
+        run: |
+          echo "Stopping Tracee (PID: $TRACEE_PID)..."
+          sudo kill $TRACEE_PID 2>/dev/null || true
+          wait $TRACEE_PID 2>/dev/null || true
+          sleep 2
+          
+          # Fix permissions on output directory for artifact upload
+          sudo chmod -R 777 /tmp/tracee-out/
+          
+          echo "Tracee output contents:"
+          ls -la /tmp/tracee-out/ || echo "No output directory"
+          
+          if [ -f /tmp/tracee-out/behavior.jsonl ]; then
+            echo "✅ Tracee captured $(wc -l < /tmp/tracee-out/behavior.jsonl) events"
+            echo "First 10 events (for debugging):"
+            head -10 /tmp/tracee-out/behavior.jsonl || true
+          else
+            echo "⚠️ No tracee output file found"
+          fi
+
+      - name: Cleanup container
+        if: always()
+        run: |
+          echo "Cleaning up container..."
+          docker stop analysis 2>/dev/null || true
+          docker rm analysis 2>/dev/null || true
+          echo "✅ Cleanup complete"
+
+      - name: Upload behavioral analysis results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: behavior-${{ inputs.package }}-${{ inputs.version }}-${{ github.run_id }}
+          path: /tmp/tracee-out/behavior.jsonl
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload debug info on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: debug-${{ inputs.package }}-${{ inputs.version }}-${{ github.run_id }}
+          path: |
+            /tmp/tracee-out/
+            dist/
+          if-no-files-found: ignore
+          retention-days: 7
