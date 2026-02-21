@@ -11,16 +11,14 @@ import {
 import { Progress } from './ui/progress';
 
 interface DependencyGraphProps {
-  isDark: boolean;
   progress: number;
 }
 
-export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
+export function DependencyGraph({ progress }: DependencyGraphProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   useEffect(() => {
-    // Build the dependency graph based on progress
     const allNodes: Node[] = [
       {
         id: 'root',
@@ -28,9 +26,9 @@ export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
         position: { x: 250, y: 0 },
         data: { label: 'my-app' },
         style: {
-          background: isDark ? '#22c55e' : '#16a34a',
-          color: isDark ? '#000' : '#fff',
-          border: `2px solid ${isDark ? '#4ade80' : '#22c55e'}`,
+          background: '#22c55e',
+          color: '#000',
+          border: '2px solid #4ade80',
           borderRadius: '8px',
           padding: '10px',
         },
@@ -41,9 +39,9 @@ export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
         position: { x: 50, y: 120 },
         data: { label: 'kleur@4.1.5' },
         style: {
-          background: progress > 20 ? (isDark ? '#22c55e' : '#16a34a') : isDark ? '#1f2937' : '#e5e7eb',
-          color: progress > 20 ? (isDark ? '#000' : '#fff') : isDark ? '#9ca3af' : '#6b7280',
-          border: `2px solid ${progress > 20 ? (isDark ? '#4ade80' : '#22c55e') : isDark ? '#374151' : '#d1d5db'}`,
+          background: progress > 20 ? '#22c55e' : '#1f2937',
+          color: progress > 20 ? '#000' : '#9ca3af',
+          border: `2px solid ${progress > 20 ? '#4ade80' : '#374151'}`,
           borderRadius: '8px',
           padding: '10px',
         },
@@ -54,9 +52,9 @@ export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
         position: { x: 200, y: 120 },
         data: { label: 'nanoid@3.3.10' },
         style: {
-          background: progress > 40 ? (isDark ? '#22c55e' : '#16a34a') : isDark ? '#1f2937' : '#e5e7eb',
-          color: progress > 40 ? (isDark ? '#000' : '#fff') : isDark ? '#9ca3af' : '#6b7280',
-          border: `2px solid ${progress > 40 ? (isDark ? '#4ade80' : '#22c55e') : isDark ? '#374151' : '#d1d5db'}`,
+          background: progress > 40 ? '#22c55e' : '#1f2937',
+          color: progress > 40 ? '#000' : '#9ca3af',
+          border: `2px solid ${progress > 40 ? '#4ade80' : '#374151'}`,
           borderRadius: '8px',
           padding: '10px',
         },
@@ -67,9 +65,9 @@ export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
         position: { x: 350, y: 120 },
         data: { label: 'nanoid@3.3.11' },
         style: {
-          background: progress > 60 ? '#ef4444' : isDark ? '#1f2937' : '#e5e7eb',
-          color: progress > 60 ? '#fff' : isDark ? '#9ca3af' : '#6b7280',
-          border: `2px solid ${progress > 60 ? '#dc2626' : isDark ? '#374151' : '#d1d5db'}`,
+          background: progress > 60 ? '#ef4444' : '#1f2937',
+          color: progress > 60 ? '#fff' : '#9ca3af',
+          border: `2px solid ${progress > 60 ? '#dc2626' : '#374151'}`,
           borderRadius: '8px',
           padding: '10px',
         },
@@ -80,9 +78,9 @@ export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
         position: { x: 125, y: 240 },
         data: { label: 'example.com' },
         style: {
-          background: progress > 70 ? (isDark ? '#22c55e' : '#16a34a') : isDark ? '#1f2937' : '#e5e7eb',
-          color: progress > 70 ? (isDark ? '#000' : '#fff') : isDark ? '#9ca3af' : '#6b7280',
-          border: `2px solid ${progress > 70 ? (isDark ? '#4ade80' : '#22c55e') : isDark ? '#374151' : '#d1d5db'}`,
+          background: progress > 70 ? '#22c55e' : '#1f2937',
+          color: progress > 70 ? '#000' : '#9ca3af',
+          border: `2px solid ${progress > 70 ? '#4ade80' : '#374151'}`,
           borderRadius: '8px',
           padding: '10px',
           fontSize: '12px',
@@ -94,9 +92,9 @@ export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
         position: { x: 275, y: 240 },
         data: { label: 'npmjs.com' },
         style: {
-          background: progress > 80 ? (isDark ? '#22c55e' : '#16a34a') : isDark ? '#1f2937' : '#e5e7eb',
-          color: progress > 80 ? (isDark ? '#000' : '#fff') : isDark ? '#9ca3af' : '#6b7280',
-          border: `2px solid ${progress > 80 ? (isDark ? '#4ade80' : '#22c55e') : isDark ? '#374151' : '#d1d5db'}`,
+          background: progress > 80 ? '#22c55e' : '#1f2937',
+          color: progress > 80 ? '#000' : '#9ca3af',
+          border: `2px solid ${progress > 80 ? '#4ade80' : '#374151'}`,
           borderRadius: '8px',
           padding: '10px',
           fontSize: '12px',
@@ -108,9 +106,9 @@ export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
         position: { x: 425, y: 240 },
         data: { label: 'iamavirus.com' },
         style: {
-          background: progress > 90 ? '#ef4444' : isDark ? '#1f2937' : '#e5e7eb',
-          color: progress > 90 ? '#fff' : isDark ? '#9ca3af' : '#6b7280',
-          border: `2px solid ${progress > 90 ? '#dc2626' : isDark ? '#374151' : '#d1d5db'}`,
+          background: progress > 90 ? '#ef4444' : '#1f2937',
+          color: progress > 90 ? '#fff' : '#9ca3af',
+          border: `2px solid ${progress > 90 ? '#dc2626' : '#374151'}`,
           borderRadius: '8px',
           padding: '10px',
           fontSize: '12px',
@@ -129,58 +127,54 @@ export function DependencyGraph({ isDark, progress }: DependencyGraphProps) {
 
     setNodes(allNodes);
     setEdges(allEdges);
-  }, [isDark, progress, setNodes, setEdges]);
+  }, [progress, setNodes, setEdges]);
 
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b" style={{ 
-        borderColor: isDark ? '#374151' : '#e5e7eb',
-        background: isDark ? '#111827' : '#f9fafb'
+        borderColor: '#374151',
+        background: '#111827'
       }}>
-        <h2 className="text-lg mb-3" style={{ color: isDark ? '#22c55e' : '#16a34a' }}>
+        <h2 className="text-lg mb-3" style={{ color: '#22c55e' }}>
           Dependency Analysis
         </h2>
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span style={{ color: isDark ? '#9ca3af' : '#6b7280' }}>Progress</span>
-            <span style={{ color: isDark ? '#22c55e' : '#16a34a' }}>{Math.round(progress)}%</span>
+            <span style={{ color: '#9ca3af' }}>Progress</span>
+            <span style={{ color: '#22c55e' }}>{Math.round(progress)}%</span>
           </div>
           <Progress 
             value={progress} 
             className="h-2"
-            indicatorClassName={isDark ? 'bg-green-500' : 'bg-green-600'}
-            style={{
-              background: isDark ? '#374151' : '#e5e7eb',
-            }}
+            indicatorClassName={'bg-green-500'}
+            style={{ background: '#374151' }}
           />
           <div className="flex gap-4 text-xs mt-3 flex-wrap">
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded" style={{ background: isDark ? '#22c55e' : '#16a34a' }} />
-              <span style={{ color: isDark ? '#9ca3af' : '#6b7280' }}>Safe</span>
+              <div className="w-3 h-3 rounded" style={{ background: '#22c55e' }} />
+              <span style={{ color: '#9ca3af' }}>Safe</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded" style={{ background: '#ef4444' }} />
-              <span style={{ color: isDark ? '#9ca3af' : '#6b7280' }}>Flagged</span>
+              <span style={{ color: '#9ca3af' }}>Flagged</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded" style={{ background: isDark ? '#374151' : '#e5e7eb' }} />
-              <span style={{ color: isDark ? '#9ca3af' : '#6b7280' }}>Pending</span>
+              <div className="w-3 h-3 rounded" style={{ background: '#374151' }} />
+              <span style={{ color: '#9ca3af' }}>Pending</span>
             </div>
           </div>
         </div>
       </div>
-      <div className="flex-1" style={{ background: isDark ? '#0a0a0a' : '#ffffff' }}>
+      <div className="flex-1" style={{ background: '#0a0a0a' }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           fitView
-          style={{
-            background: isDark ? '#0a0a0a' : '#ffffff',
-          }}
+          style={{ background: '#0a0a0a' }}
         >
-          <Background color={isDark ? '#22c55e' : '#86efac'} gap={16} />
+          <Background color={'#22c55e'} gap={16} />
           <Controls />
         </ReactFlow>
       </div>

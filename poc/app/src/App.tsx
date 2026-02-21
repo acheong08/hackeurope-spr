@@ -1,22 +1,12 @@
 import { useState, useEffect } from 'react';
 import { DependencyGraph } from './components/DependencyGraph';
 import { Terminal } from './components/Terminal';
-import { Moon, Sun, RotateCcw } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 
 export default function App() {
-  const [isDark, setIsDark] = useState(true);
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [analysisKey, setAnalysisKey] = useState(0);
-
-  // Update body class for dark mode
-  useEffect(() => {
-    if (isDark) {
-      document.body.classList.add('dark');
-    } else {
-      document.body.classList.remove('dark');
-    }
-  }, [isDark]);
 
   const restartAnalysis = () => {
     setProgress(0);
@@ -81,30 +71,29 @@ export default function App() {
     <div 
       className="h-screen flex flex-col"
       style={{ 
-        background: isDark ? '#0a0a0a' : '#ffffff',
-        color: isDark ? '#22c55e' : '#16a34a'
+        background: '#0a0a0a',
+        color: '#22c55e'
       }}
     >
-      {/* Header */}
       <header 
         className="border-b px-4 md:px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3"
         style={{ 
-          borderColor: isDark ? '#374151' : '#e5e7eb',
-          background: isDark ? '#111827' : '#f9fafb'
+          borderColor: '#374151',
+          background: '#111827'
         }}
       >
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: isDark ? '#22c55e' : '#16a34a' }}>
-              <span className="text-lg" style={{ color: isDark ? '#000' : '#fff' }}>S</span>
+            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: '#22c55e' }}>
+              <span className="text-lg" style={{ color: '#000' }}>S</span>
             </div>
-            <h1 className="text-xl md:text-2xl" style={{ color: isDark ? '#22c55e' : '#16a34a' }}>
+            <h1 className="text-xl md:text-2xl" style={{ color: '#22c55e' }}>
               HackEurope SPR
             </h1>
           </div>
           <span className="text-xs md:text-sm px-2 py-1 rounded" style={{ 
-            background: isDark ? '#374151' : '#e5e7eb',
-            color: isDark ? '#9ca3af' : '#6b7280'
+            background: '#374151',
+            color: '#9ca3af'
           }}>
             Supply Chain Package Registry
           </span>
@@ -114,40 +103,25 @@ export default function App() {
             onClick={restartAnalysis}
             className="p-2 rounded-lg transition-colors hover:bg-opacity-80"
             style={{ 
-              background: isDark ? '#374151' : '#e5e7eb',
-              color: isDark ? '#22c55e' : '#16a34a'
+              background: '#374151',
+              color: '#22c55e'
             }}
             aria-label="Restart Analysis"
           >
             <RotateCcw className="w-5 h-5" />
           </button>
-          <button
-            onClick={() => setIsDark(!isDark)}
-            className="p-2 rounded-lg transition-colors hover:bg-opacity-80"
-            style={{ 
-              background: isDark ? '#374151' : '#e5e7eb',
-              color: isDark ? '#22c55e' : '#16a34a'
-            }}
-            aria-label="Toggle theme"
-          >
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
         </div>
       </header>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 overflow-hidden">
-        {/* Left: Dependency Graph */}
         <div 
           className="h-1/2 lg:h-full border-b lg:border-b-0 lg:border-r"
-          style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
+          style={{ borderColor: '#374151' }}
         >
-          <DependencyGraph isDark={isDark} progress={progress} />
+          <DependencyGraph progress={progress} />
         </div>
-
-        {/* Right: Terminal */}
         <div className="h-1/2 lg:h-full">
-          <Terminal isDark={isDark} logs={logs} />
+          <Terminal logs={logs} />
         </div>
       </div>
     </div>
