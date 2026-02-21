@@ -186,6 +186,83 @@ func (u *Uploader) UploadPackageWithMetadata(ctx context.Context, name, version 
 	return fmt.Errorf("failed to upload package: status %d, body: %s", resp.StatusCode, string(body))
 }
 
+// normalizeBinField ensures the bin field is in object format
+// npm allows bin to be a string (e.g., "bin": "./cli.js") which needs to be
+// converted to an object like {"package-name": "./cli.js"} for Gitea registry
+func normalizeBinField(apiMetadata map[string]interface{}, pkgName string) map[string]interface{} {
+	if bin, ok := apiMetadata["bin"]; ok {
+		switch v := bin.(type) {
+		case string:
+			// Convert string to object using unscoped package name as key
+			unscopedName := pkgName
+			if strings.HasPrefix(pkgName, "@") {
+				parts := strings.SplitN(pkgName, "/", 2)
+				if len(parts) == 2 {
+					unscopedName = parts[1]
+				}
+			}
+			return map[string]interface{}{
+				unscopedName: v,
+			}
+		case map[string]interface{}:
+			// Already in correct format
+			return v
+		}
+	}
+	return nil
+}
+
+// normalizeRepositoryField ensures the repository field is in object format
+// npm allows repository to be a string (e.g., "github:user/repo" or "user/repo")
+// which needs to be converted to {"type": "git", "url": "..."} for Gitea registry
+func normalizeRepositoryField(apiMetadata map[string]interface{}) map[string]interface{} {
+	if repo, ok := apiMetadata["repository"]; ok {
+		switch v := repo.(type) {
+		case string:
+			// Convert string to object
+			url := v
+			repoType := "git"
+
+			// Handle shorthand formats
+			if strings.HasPrefix(v, "github:") {
+				// github:user/repo -> git+https://github.com/user/repo.git
+				path := strings.TrimPrefix(v, "github:")
+				url = "git+https://github.com/" + path + ".git"
+			} else if strings.HasPrefix(v, "gitlab:") {
+				// gitlab:user/repo -> git+https://gitlab.com/user/repo.git
+				path := strings.TrimPrefix(v, "gitlab:")
+				url = "git+https://gitlab.com/" + path + ".git"
+			} else if strings.HasPrefix(v, "bitbucket:") {
+				// bitbucket:user/repo -> git+https://bitbucket.org/user/repo.git
+				path := strings.TrimPrefix(v, "bitbucket:")
+				url = "git+https://bitbucket.org/" + path + ".git"
+			} else if strings.HasPrefix(v, "gist:") {
+				// gist:gistId
+				gistId := strings.TrimPrefix(v, "gist:")
+				url = "https://gist.github.com/" + gistId
+				repoType = "gist"
+			} else if !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") && !strings.HasPrefix(v, "git+") && strings.Contains(v, "/") {
+				// user/repo shorthand -> https://github.com/user/repo
+				// But only if it looks like a shorthand (contains / but isn't a full URL)
+				url = "git+https://github.com/" + v + ".git"
+			}
+
+			return map[string]interface{}{
+				"type": repoType,
+				"url":  url,
+			}
+		case map[string]interface{}:
+			// Already in object format - ensure it has url field
+			if _, hasURL := v["url"]; hasURL {
+				return v
+			}
+			// Invalid object without url field, skip it
+			return nil
+		}
+	}
+	return nil
+}
+
 // buildMetadataFromAPI constructs npm package metadata JSON using pre-fetched API metadata
 // The npm registry API already returns normalized fields (bin as object, repository as object, etc.)
 func (u *Uploader) buildMetadataFromAPI(name, version string, tarball []byte, apiMetadata map[string]interface{}) (map[string]interface{}, error) {
@@ -224,14 +301,24 @@ func (u *Uploader) buildMetadataFromAPI(name, version string, tarball []byte, ap
 	// Copy normalized fields from API metadata (npm registry already normalizes these)
 	if apiMetadata != nil {
 		// Essential fields for npx and module resolution
-		for _, field := range []string{"scripts", "main", "module", "type", "bin"} {
+		for _, field := range []string{"scripts", "main", "module", "type"} {
 			if val, ok := apiMetadata[field]; ok {
 				manifest[field] = val
 			}
 		}
 
+		// Handle bin field specially - needs normalization from string to object
+		if binVal := normalizeBinField(apiMetadata, name); binVal != nil {
+			manifest["bin"] = binVal
+		}
+
+		// Handle repository field specially - needs normalization from string to object
+		if repoVal := normalizeRepositoryField(apiMetadata); repoVal != nil {
+			manifest["repository"] = repoVal
+		}
+
 		// Optional metadata fields (all already normalized by npm API)
-		for _, field := range []string{"description", "author", "repository", "license", "keywords", "homepage", "bugs", "engines", "os", "cpu", "dependencies", "peerDependencies", "devDependencies", "bundledDependencies", "optionalDependencies"} {
+		for _, field := range []string{"description", "author", "license", "keywords", "homepage", "bugs", "engines", "os", "cpu", "dependencies", "peerDependencies", "devDependencies", "bundledDependencies", "optionalDependencies"} {
 			if val, ok := apiMetadata[field]; ok {
 				manifest[field] = val
 			}
