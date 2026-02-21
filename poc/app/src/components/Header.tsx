@@ -1,4 +1,4 @@
-import { RotateCcw, Wifi, WifiOff } from "lucide-react";
+import { Play, RotateCcw, Wifi, WifiOff } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 
 interface HeaderProps {
@@ -66,17 +66,19 @@ function Header({
           onFileRemove={onFileRemove}
         />
 
-        <button
-          onClick={startAnalysis}
-          className="p-2 rounded-lg transition-colors hover:bg-opacity-80 cursor-pointer"
-          style={{
-            background: "#374151",
-            color: "#22c55e",
-          }}
-          aria-label="Restart Analysis"
-        >
-          <RotateCcw className="w-5 h-5" />
-        </button>
+        {uploadedFile && (
+          <button
+            onClick={startAnalysis}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:bg-opacity-80 cursor-pointer font-medium"
+            style={{
+              background: "#22c55e",
+              color: "#000",
+            }}
+          >
+            <Play className="w-4 h-4" />
+            <span>Start Analysis</span>
+          </button>
+        )}
       </div>
     </header>
   );
