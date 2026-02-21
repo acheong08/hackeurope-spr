@@ -50,12 +50,12 @@ const dataGatheringPkgStyle = {
 };
 
 interface PackageNode {
-  ID: string;
-  Name: string;
-  Version: string;
-  Resolved: string;
-  Integrity: string;
-  Dependencies: Record<string, string>;
+  id: string;
+  name: string;
+  version: string;
+  resolved: string;
+  integrity: string;
+  dependencies: Record<string, string>;
 }
 
 export default function App() {
@@ -83,16 +83,16 @@ export default function App() {
         case "dag": {
           // Received DAG data - build the graph
           const payload = msg.payload as {
-            root_package: { ID: string; Name: string; Version: string };
+            root_package: { id: string; name: string; version: string };
             nodes: PackageNode[];
             edge_count: number;
           };
           
           // Build nodes from DAG
           const newNodes: Node[] = payload.nodes.map((pkg) => ({
-            id: pkg.ID,
+            id: pkg.id,
             type: "default",
-            data: { label: `${pkg.Name}@${pkg.Version}` },
+            data: { label: `${pkg.name}@${pkg.version}` },
             position: { x: 0, y: 0 },
             style: dataGatheringPkgStyle,
           }));
@@ -102,16 +102,16 @@ export default function App() {
           
           payload.nodes.forEach((pkg) => {
             // Check if this package is a direct dependency of root
-            if (pkg.Dependencies && Object.keys(pkg.Dependencies).length > 0) {
+            if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
               // This is likely the root or has deps
-              Object.entries(pkg.Dependencies).forEach(([depName]) => {
+              Object.entries(pkg.dependencies).forEach(([depName]) => {
                 // Find the dependent node
-                const dependentNode = payload.nodes.find(n => n.Name === depName);
+                const dependentNode = payload.nodes.find(n => n.name === depName);
                 if (dependentNode) {
                   newEdges.push({
-                    id: `${pkg.ID}-${dependentNode.ID}`,
-                    source: pkg.ID,
-                    target: dependentNode.ID,
+                    id: `${pkg.id}-${dependentNode.id}`,
+                    source: pkg.id,
+                    target: dependentNode.id,
                     markerEnd: { type: MarkerType.ArrowClosed },
                   });
                 }
