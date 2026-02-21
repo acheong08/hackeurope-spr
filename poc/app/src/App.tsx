@@ -62,6 +62,7 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [analysisKey, setAnalysisKey] = useState(0);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -162,18 +163,25 @@ export default function App() {
         } else {
           addLog(`✗ ${payload.message}`);
         }
+        setIsAnalyzing(false);
         break;
       }
       
       case "error": {
         const payload = lastMessage.payload as { message: string };
         addLog(`✗ Error: ${payload.message}`);
+        setIsAnalyzing(false);
         break;
       }
     }
   }, [lastMessage]);
 
   const startAnalysis = () => {
+    if (isAnalyzing) {
+      addLog("⚠ Analysis already in progress");
+      return;
+    }
+    
     if (!packageContent) {
       addLog("⚠ Please upload a package.json file first");
       return;
@@ -184,6 +192,7 @@ export default function App() {
       return;
     }
 
+    setIsAnalyzing(true);
     setProgress(0);
     setLogs([]);
     setAnalysisKey((prev) => prev + 1);
@@ -265,6 +274,7 @@ export default function App() {
         onFileUpload={handleFileUpload}
         onFileRemove={handleFileRemove}
         isConnected={isConnected}
+        isAnalyzing={isAnalyzing}
       />
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal" className="h-full">

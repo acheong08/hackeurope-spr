@@ -60,21 +60,20 @@ func (lm *LockfileManager) GenerateLockfile(packageJSONPath string) (string, err
 	}
 
 	destPath := filepath.Join(tempDir, "package.json")
-	if err := os.WriteFile(destPath, data, 0644); err != nil {
+	if err := os.WriteFile(destPath, data, 0o644); err != nil {
 		os.RemoveAll(tempDir)
 		return "", fmt.Errorf("failed to write package.json to temp: %w", err)
 	}
 
 	// Run npm install --package-lock-only
-	cmd := exec.Command("npm", "install", "--package-lock-only", "--silent")
+	cmd := exec.Command("npm", "install", "--package-lock-only")
 	cmd.Dir = tempDir
-	// Discard npm output
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	// Capture npm output for debugging
+	output, err := cmd.CombinedOutput()
 
-	if err := cmd.Run(); err != nil {
+	if err != nil {
 		os.RemoveAll(tempDir)
-		return "", fmt.Errorf("npm install --package-lock-only failed: %w", err)
+		return "", fmt.Errorf("npm install --package-lock-only failed: %w\nOutput: %s", err, string(output))
 	}
 
 	lockfilePath := filepath.Join(tempDir, "package-lock.json")

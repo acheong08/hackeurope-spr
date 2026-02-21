@@ -1,4 +1,4 @@
-import { Play, RotateCcw, Wifi, WifiOff } from "lucide-react";
+import { Play, Loader2, Wifi, WifiOff } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 
 interface HeaderProps {
@@ -7,6 +7,7 @@ interface HeaderProps {
   onFileUpload: (file: File) => void;
   onFileRemove: () => void;
   isConnected: boolean;
+  isAnalyzing: boolean;
 }
 
 function Header({
@@ -15,6 +16,7 @@ function Header({
   onFileUpload,
   onFileRemove,
   isConnected,
+  isAnalyzing,
 }: HeaderProps) {
   return (
     <header
@@ -64,19 +66,30 @@ function Header({
           uploadedFile={uploadedFile}
           onFileUpload={onFileUpload}
           onFileRemove={onFileRemove}
+          disabled={isAnalyzing}
         />
 
         {uploadedFile && (
           <button
             onClick={startAnalysis}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:bg-opacity-80 cursor-pointer font-medium"
+            disabled={isAnalyzing}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:bg-opacity-80 cursor-pointer font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: "#22c55e",
-              color: "#000",
+              background: isAnalyzing ? "#374151" : "#22c55e",
+              color: isAnalyzing ? "#9ca3af" : "#000",
             }}
           >
-            <Play className="w-4 h-4" />
-            <span>Start Analysis</span>
+            {isAnalyzing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Analyzing...</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4" />
+                <span>Start Analysis</span>
+              </>
+            )}
           </button>
         )}
       </div>

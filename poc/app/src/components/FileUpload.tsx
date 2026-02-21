@@ -4,12 +4,14 @@ interface FileUploadProps {
   uploadedFile: File | null;
   onFileUpload: (file: File) => void;
   onFileRemove: () => void;
+  disabled?: boolean;
 }
 
 export function FileUpload({
   uploadedFile,
   onFileUpload,
   onFileRemove,
+  disabled,
 }: FileUploadProps) {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -58,7 +60,8 @@ export function FileUpload({
           </span>
           <button
             onClick={onFileRemove}
-            className="p-1 rounded transition-colors hover:bg-red-500/20"
+            disabled={disabled}
+            className="p-1 rounded transition-colors hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ color: "#ef4444" }}
             aria-label="Remove file"
           >
