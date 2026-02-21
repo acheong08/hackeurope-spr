@@ -43,21 +43,10 @@ export function Terminal({ logs, addLog }: TerminalProps) {
   return (
     <div className="h-full flex flex-col">
       <div
-        className="p-4 border-b flex justify-between items-center"
-        style={{
-          borderColor: "#374151",
-          background: "#111827",
-        }}
-      >
-        <h2 className="text-lg" style={{ color: "#22c55e" }}>
-          SPR Analysis Terminal
-        </h2>
-      </div>
-      <div
         ref={scrollRef}
         className="flex-1 p-4 font-mono text-sm overflow-y-auto"
         style={{
-          background: "#000000",
+          background: "#0a0a0a",
           color: "#4ade80",
         }}
       >

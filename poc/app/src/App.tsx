@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { DependencyGraph } from "./components/DependencyGraph";
 import { Terminal } from "./components/Terminal";
-import { BehaviouralAnalysis } from "./components/BehaviouralAnalysis";
+import { Analysis } from "./components/Analysis";
+import { Data } from "./components/Data";
 import Header from "./components/Header";
 import {
   ResizablePanelGroup,
@@ -19,8 +20,9 @@ import type { Dependency } from "./types/Dependency";
 import { getLayoutedElements } from "./utils/getLayoutedElements";
 
 enum Tab {
-  SPR_ANALYSIS,
-  BEHAVIOURAL_ANALYSIS,
+  LOGS,
+  DATA,
+  ANALYSIS
 }
 
 const safePkgStyle = {
@@ -56,7 +58,7 @@ export default function App() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [packageData, setPackageData] = useState<any>(null);
 
-  const [selectedTab, setSelectedTab] = useState<Tab>(Tab.SPR_ANALYSIS);
+  const [selectedTab, setSelectedTab] = useState<Tab>(Tab.LOGS);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -65,7 +67,7 @@ export default function App() {
     setProgress(0);
     setLogs([]);
     setAnalysisKey((prev) => prev + 1);
-    setSelectedTab(Tab.SPR_ANALYSIS);
+    setSelectedTab(Tab.LOGS);
   };
 
   const addLog = (log: string) => {
@@ -75,10 +77,9 @@ export default function App() {
   const handleNodeClick = (nodeId: string) => {
     if (selectedNode == nodeId) {
       setSelectedNode(null);
-      setSelectedTab(Tab.SPR_ANALYSIS);
+      setSelectedTab(Tab.LOGS);
     } else {
       setSelectedNode(nodeId);
-      setSelectedTab(Tab.BEHAVIOURAL_ANALYSIS);
     }
   };
 
@@ -89,7 +90,6 @@ export default function App() {
   const handleFileUpload = (file: File) => {
     setUploadedFile(file);
 
-    // Read and parse the file
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -97,7 +97,6 @@ export default function App() {
         const json = JSON.parse(content);
         setPackageData(json);
 
-        // Add log that file was uploaded
         setLogs((prev) => [
           ...prev,
           `\n> Uploaded: ${file.name}`,
@@ -156,14 +155,6 @@ export default function App() {
     });
   };
 
-  useEffect(() => {
-    constructDependencyGraph([
-      { label: "kleur@4.1.5" },
-      { label: "nanoid@3.3.10", dependent: "kleur@4.1.5" },
-      { label: "test@4.2.10", dependent: "kleur@4.1.5" },
-    ]);
-  }, []);
-
   return (
     <div
       className="h-screen flex flex-col"
@@ -209,56 +200,74 @@ export default function App() {
                 }}
               >
                 <button
-                  onClick={() => handleSetPanel(Tab.SPR_ANALYSIS)}
+                  onClick={() => handleSetPanel(Tab.LOGS)}
                   className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
                   style={{
                     background:
-                      selectedTab == Tab.SPR_ANALYSIS
+                      selectedTab == Tab.LOGS
                         ? "#0a0a0a"
                         : "transparent",
                     color:
-                      selectedTab == Tab.SPR_ANALYSIS ? "#22c55e" : "#9ca3af",
+                      selectedTab == Tab.LOGS ? "#22c55e" : "#9ca3af",
                     borderBottom:
-                      selectedTab == Tab.SPR_ANALYSIS
+                      selectedTab == Tab.LOGS
                         ? `2px solid #22c55e`
                         : "none",
                   }}
                 >
-                  SPR Analysis Terminal
+                  Logs
                 </button>
                 {selectedNode && (
-                  <button
-                    className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
-                    onClick={() => handleSetPanel(Tab.BEHAVIOURAL_ANALYSIS)}
-                    style={{
-                      background:
-                        selectedTab == Tab.BEHAVIOURAL_ANALYSIS
-                          ? "#0a0a0a"
-                          : "transparent",
-                      color:
-                        selectedTab == Tab.BEHAVIOURAL_ANALYSIS
-                          ? "#22c55e"
-                          : "#9ca3af",
-                      borderBottom:
-                        selectedTab == Tab.BEHAVIOURAL_ANALYSIS
-                          ? `2px solid #22c55e`
-                          : "none",
-                    }}
-                  >
-                    Behavioural Analysis
-                  </button>
+                  <>
+                    <button
+                      className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
+                      onClick={() => handleSetPanel(Tab.DATA)}
+                      style={{
+                        background:
+                          selectedTab == Tab.DATA
+                            ? "#0a0a0a"
+                            : "transparent",
+                        color:
+                          selectedTab == Tab.DATA
+                            ? "#22c55e"
+                            : "#9ca3af",
+                        borderBottom:
+                          selectedTab == Tab.DATA
+                            ? `2px solid #22c55e`
+                            : "none",
+                      }}
+                    >
+                      Data
+                    </button>
+                    <button
+                      className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
+                      onClick={() => handleSetPanel(Tab.ANALYSIS)}
+                      style={{
+                        background:
+                          selectedTab == Tab.ANALYSIS
+                            ? "#0a0a0a"
+                            : "transparent",
+                        color:
+                          selectedTab == Tab.ANALYSIS
+                            ? "#22c55e"
+                            : "#9ca3af",
+                        borderBottom:
+                          selectedTab == Tab.ANALYSIS
+                            ? `2px solid #22c55e`
+                            : "none",
+                      }}
+                    >
+                      Analysis
+                    </button>
+                  </>
                 )}
               </div>
-              <div className="flex-1 overflow-hidden">
-                {selectedTab == Tab.SPR_ANALYSIS ? (
-                  <Terminal logs={logs} addLog={addLog} />
-                ) : (
-                  <BehaviouralAnalysis
-                    selectedNode={selectedNode}
-                    onClose={() => handleSetPanel(Tab.SPR_ANALYSIS)}
-                  />
-                )}
-              </div>
+              {selectedTab == Tab.LOGS ? (
+                <Terminal logs={logs} addLog={addLog} />
+              ) : selectedTab == Tab.ANALYSIS ? (
+                <Analysis selectedNode={selectedNode} />
+              ) : 
+                <Data selectedNode={selectedNode} />}
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

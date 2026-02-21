@@ -56,7 +56,7 @@ function Header({
 
         <button
           onClick={startAnalysis}
-          className="p-2 rounded-lg transition-colors hover:bg-opacity-80"
+          className="p-2 rounded-lg transition-colors hover:bg-opacity-80 cursor-pointer"
           style={{
             background: "#374151",
             color: "#22c55e",
