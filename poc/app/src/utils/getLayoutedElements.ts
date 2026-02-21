@@ -1,18 +1,25 @@
 import dagre from "dagre";
 import { type Node, type Edge } from "@xyflow/react";
 
-const dagreGraph = new dagre.graphlib.Graph();
-dagreGraph.setDefaultEdgeLabel(() => ({}));
-
-const nodeWidth = 150;
-const nodeHeight = 50;
+const nodeWidth = 172;
+const nodeHeight = 36;
 
 export const getLayoutedElements = (
   nodes: Node[],
   edges: Edge[],
-  direction = "TB",
+  direction = "LR",
 ) => {
-  dagreGraph.setGraph({ rankdir: direction });
+  // Create a fresh dagre graph instance for each calculation
+  const dagreGraph = new dagre.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+  dagreGraph.setGraph({ 
+    rankdir: direction,
+    ranksep: 80,
+    nodesep: 40,
+    edgesep: 10,
+    marginx: 20,
+    marginy: 20,
+  });
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });

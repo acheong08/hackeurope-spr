@@ -122,8 +122,8 @@ export function DependencyGraph({
           onEdgesChange={onEdgesChange}
           onNodeClick={(_, node: Node) => onNodeClick(node.id)}
           fitView
-          fitViewOptions={{ padding: 0.2, duration: 800 }}
-          minZoom={0.1}
+          fitViewOptions={{ padding: 0.1, duration: 600, minZoom: 0.1, maxZoom: 1.5 }}
+          minZoom={0.05}
           maxZoom={2}
           style={{ background: "#0a0a0a" }}
         >
