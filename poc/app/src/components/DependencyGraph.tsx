@@ -57,18 +57,15 @@ export function DependencyGraph({ progress }: DependencyGraph) {
       };
     }
 
-    setNodes((nds: Node[]) => {
-      setEdges((eds: Edge[]) => {
-        const nextEdges = newEdge ? [...eds, newEdge] : eds;
-        const nextNodes = [...nds, newNode];
+    setEdges((curEdges: Edge[]) => {
+      const nextEdges = newEdge ? [...curEdges, newEdge] : curEdges;
 
-        const layoutedNodes = getLayoutedElements(nextNodes, nextEdges);
-        setNodes(layoutedNodes);
-        
-        return nextEdges;
+      setNodes((curNodes: Node[]) => {
+        const layoutedNodes = getLayoutedElements([...curNodes, newNode], nextEdges);
+        return layoutedNodes;
       });
-      
-      return nds;
+
+      return nextEdges;
     });
   };
 
@@ -77,6 +74,7 @@ export function DependencyGraph({ progress }: DependencyGraph) {
     
     updateGraph({ label: 'kleur@4.1.5', flagged: false });
     updateGraph({ label: 'nanoid@3.3.10', dependent: 'kleur@4.1.5', flagged: true });
+    updateGraph({ label: 'test@4.2.10', dependent: 'kleur@4.1.5', flagged: false });
 
     return () => {
       socket?.off("new-dependency", updateGraph);
