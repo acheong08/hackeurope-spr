@@ -89,8 +89,8 @@ func (d *Detector) DetectPackage(name, version string) (*PackageInfo, error) {
 	var url string
 	if d.RegistryOwner != "" {
 		// Use Gitea registry format: /api/packages/{owner}/npm/{packageName}
-		pkgPath := normalizePackageName(name)
-		url = fmt.Sprintf("%s/api/packages/%s/npm/%s", d.RegistryURL, d.RegistryOwner, pkgPath)
+		// Gitea uses the original package name format (including @ for scoped packages)
+		url = fmt.Sprintf("%s/api/packages/%s/npm/%s", d.RegistryURL, d.RegistryOwner, name)
 	} else {
 		// Use standard npm registry
 		url = fmt.Sprintf("%s/%s", d.RegistryURL, name)
