@@ -217,8 +217,8 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 					log.Printf("    [Worker] Aborting artifact copy for %s@%s: context cancelled\n", pkgName, pkgVersion)
 					return
 				default:
-					destPath := filepath.Join(pkgOutputDir, filepath.Base(artifactPath))
-					if err := copyDir(artifactPath, destPath); err != nil {
+					// Copy contents of artifact directory directly into pkgOutputDir (flatten structure)
+					if err := copyDirContents(artifactPath, pkgOutputDir); err != nil {
 						log.Printf("    [Worker] Warning: failed to copy artifact %s: %v\n", artifactPath, err)
 					}
 				}
@@ -375,6 +375,39 @@ func isSubPath(path, base string) bool {
 
 // copyDir recursively copies a directory
 func copyDir(src, dst string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// copyDirContents copies the contents of src directory into dst directory
+func copyDirContents(src, dst string) error {
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return err
