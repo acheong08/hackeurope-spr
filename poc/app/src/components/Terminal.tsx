@@ -1,4 +1,4 @@
-import { useEffect, useRef, useContext, useState } from 'react';
+import { useEffect, useRef, useContext } from 'react';
 import { SocketContext } from '../providers/SocketProvider';
 
 interface TerminalProps {
@@ -45,11 +45,6 @@ export function Terminal({ logs, addLog }: TerminalProps) {
         <h2 className="text-lg" style={{ color: '#22c55e' }}>
           SPR Analysis Terminal
         </h2>
-        <div className="flex gap-2">
-          <div className="w-3 h-3 rounded-full bg-red-500" />
-          <div className="w-3 h-3 rounded-full bg-yellow-500" />
-          <div className="w-3 h-3 rounded-full" style={{ background: '#22c55e' }} />
-        </div>
       </div>
       <div 
         ref={scrollRef}

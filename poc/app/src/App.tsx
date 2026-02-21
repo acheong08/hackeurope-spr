@@ -9,20 +9,64 @@ import {
   ResizablePanel, 
   ResizableHandle 
 } from './components/ui/resizable';
+import {
+  useNodesState,
+  useEdgesState,
+  MarkerType,
+  type Node,
+  type Edge,
+} from '@xyflow/react';
+import type { Dependency } from './types/Dependency';
+import { getLayoutedElements } from './utils/getLayoutedElements';
+
+enum Tab {
+  SPR_ANALYSIS,
+  VULNERABILITY_DETAILS
+}
+
+const safePkgStyle = {
+  background: '#22c55e',
+  color: '#000',
+  border: '2px solid #4ade80',
+  borderRadius: '8px',
+  padding: '10px',
+};
+
+const flaggedPkgStyle = {
+  background: '#ef4444',
+  color: '#fff',
+  border: '2px solid #dc2626',
+  borderRadius: '8px',
+  padding: '10px',
+};
+
+const dataGatheringPkgStyle = {
+  background: '#1f2937',
+  color: '#9ca3af',
+  border: '2px solid #374151',
+  borderRadius: '8px',
+  padding: '10px',
+};
 
 export default function App() {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [analysisKey, setAnalysisKey] = useState(0);
+
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [packageData, setPackageData] = useState<any>(null);
 
+  const [selectedTab, setSelectedTab] = useState<Tab>(Tab.SPR_ANALYSIS);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const startAnalysis = () => {
     setProgress(0);
     setLogs([]);
     setAnalysisKey(prev => prev + 1);
+    setSelectedTab(Tab.SPR_ANALYSIS);
   };
 
   const addLog = (log: string) => {
@@ -30,11 +74,17 @@ export default function App() {
   }
 
   const handleNodeClick = (nodeId: string) => {
-    setSelectedNode(nodeId);
+    if (selectedNode == nodeId) {
+      setSelectedNode(null);
+      setSelectedTab(Tab.SPR_ANALYSIS);
+    } else {
+      setSelectedNode(nodeId);
+      setSelectedTab(Tab.VULNERABILITY_DETAILS);
+    }
   };
 
-  const handleClosePanel = () => {
-    setSelectedNode(null);
+  const handleSetPanel = (tab: Tab) => {
+    setSelectedTab(tab);
   };
 
     const handleFileUpload = (file: File) => {
@@ -68,60 +118,50 @@ export default function App() {
     setLogs(prev => [...prev, '\n> Package file removed']);
   };
 
-  
+   const constructDependencyGraph = (dependencies: Dependency[]) => {
+    for (const dependency of dependencies) {
+      updateGraph(dependency);
+    }
+  }
 
-  const analysisSteps = [
-    { time: 0, progress: 0, log: '$ spr check ./package.json' },
-    { time: 500, progress: 5, log: '> SPR - Supply Chain Package Registry v1.0.0' },
-    { time: 1000, progress: 10, log: '> Parsing package.json...' },
-    { time: 1500, progress: 15, log: '> Found 4 dependencies' },
-    { time: 2000, progress: 20, log: '> Building dependency DAG...' },
-    { time: 2500, progress: 25, log: '\n→ Analyzing: kleur@4.1.5' },
-    { time: 3000, progress: 30, log: '  Mirroring to unsafe registry...' },
-    { time: 3500, progress: 35, log: '  Starting behavioral analysis (Tracee)...' },
-    { time: 4000, progress: 40, log: '  Files read: /etc/os-release (NORMAL)' },
-    { time: 4500, progress: 45, log: '  Network: npmjs.com (SEEN BEFORE)' },
-    { time: 5000, progress: 50, log: '✓ kleur@4.1.5 SAFE - Promoted to safe registry\n' },
-    { time: 5500, progress: 55, log: '→ Analyzing: nanoid@3.3.10' },
-    { time: 6000, progress: 60, log: '  Mirroring to unsafe registry...' },
-    { time: 6500, progress: 65, log: '  Starting behavioral analysis (Tracee)...' },
-    { time: 7000, progress: 70, log: '  Files read: /etc/os-release (NORMAL)' },
-    { time: 7500, progress: 75, log: '  Network: npmjs.com, example.com (SEEN BEFORE)' },
-    { time: 8000, progress: 80, log: '✓ nanoid@3.3.10 SAFE - Promoted to safe registry\n' },
-    { time: 8500, progress: 85, log: '→ Analyzing: nanoid@3.3.11' },
-    { time: 9000, progress: 87, log: '  Mirroring to unsafe registry...' },
-    { time: 9500, progress: 89, log: '  Starting behavioral analysis (Tracee)...' },
-    { time: 10000, progress: 91, log: '  Files read:' },
-    { time: 10200, progress: 92, log: '    SUSPICIOUS: /etc/passwd' },
-    { time: 10400, progress: 93, log: '    SUSPICIOUS: ~/.ssh/*' },
-    { time: 10800, progress: 94, log: '  Network traffic:' },
-    { time: 11000, progress: 95, log: '    - git.github.com (SEEN BEFORE)' },
-    { time: 11200, progress: 96, log: '    - randomguy.github.io (SEEN BEFORE)' },
-    { time: 11600, progress: 97, log: '    - iamavirus.com ???? SUSPICIOUS - NEW BEHAVIOR' },
-    { time: 12000, progress: 98, log: '\n⚠ nanoid@3.3.11 FLAGGED - Suspicious behavior detected' },
-    { time: 12500, progress: 99, log: '⚠ Blocking dependent chain' },
-    { time: 13000, progress: 100, log: '⚠ Analysis complete with warnings\n' },
-    { time: 13500, progress: 100, log: 'Summary:' },
-    { time: 14000, progress: 100, log: '  ✓ Safe packages: 2' },
-    { time: 14500, progress: 100, log: '  ⚠ Flagged packages: 1' },
-    { time: 15000, progress: 100, log: '  → Review flagged packages before deployment' },
-  ];
+  const updateGraph = (dependency: Dependency) => {
+    const newNode: Node = {
+      id: dependency.label,
+      type: 'default',
+      data: { label: dependency.label },
+      position: { x: 0, y: 0 },
+      style: dataGatheringPkgStyle
+    };
+    
+    let newEdge: Edge | null = null;
+    if (dependency.dependent) {
+      newEdge = {
+        id: `${dependency.dependent}-${dependency.label}`,
+        source: dependency.dependent,
+        target: dependency.label,
+        markerEnd: { type: MarkerType.ArrowClosed }
+      };
+    }
+
+    setEdges((curEdges: Edge[]) => {
+      const nextEdges = newEdge ? [...curEdges, newEdge] : curEdges;
+
+      setNodes((curNodes: Node[]) => {
+        const layoutedNodes = getLayoutedElements([...curNodes, newNode], nextEdges);
+        return layoutedNodes;
+      });
+
+      return nextEdges;
+    });
+  };
 
   useEffect(() => {
-    const timers: NodeJS.Timeout[] = [];
-    
-    analysisSteps.forEach((step) => {
-      const timer = setTimeout(() => {
-        setProgress(step.progress);
-        addLog(step.log);
-      }, step.time);
-      timers.push(timer);
-    });
-
-    return () => {
-      timers.forEach(timer => clearTimeout(timer));
-    };
-  }, [analysisKey]);
+    constructDependencyGraph([
+      { label: 'kleur@4.1.5' }, 
+      { label: 'nanoid@3.3.10', dependent: 'kleur@4.1.5' }, 
+      { label: 'test@4.2.10', dependent: 'kleur@4.1.5' }
+    ]);
+  }, []);
 
   return (
     <div 
@@ -139,12 +179,19 @@ export default function App() {
       />
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal" className="h-full">
-          <ResizablePanel defaultSize={50} minSize={30}>
+          <ResizablePanel defaultSize={65} minSize={30}>
             <div 
               className="h-full border-r"
               style={{ borderColor: '#374151' }}
             >
-              <DependencyGraph progress={progress} onNodeClick={handleNodeClick} />
+              <DependencyGraph 
+                progress={progress} 
+                onNodeClick={handleNodeClick} 
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+              />
             </div>
           </ResizablePanel>
 
@@ -154,7 +201,7 @@ export default function App() {
               background: '#374151',
             }} 
           />
-          <ResizablePanel defaultSize={50} minSize={30}>
+          <ResizablePanel defaultSize={35} minSize={30}>
             <div className="h-full flex flex-col">
               <div 
                 className="flex border-b"
@@ -165,23 +212,24 @@ export default function App() {
               >
                 
                 <button
-                  onClick={() => setSelectedNode(null)}
-                  className="flex-1 px-4 py-3 text-sm transition-colors"
+                  onClick={() => handleSetPanel(Tab.SPR_ANALYSIS)}
+                  className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
                   style={{
-                    background: !selectedNode ? '#0a0a0a' : 'transparent',
-                    color: !selectedNode ? '#22c55e' : '#9ca3af',
-                    borderBottom: !selectedNode ? `2px solid #22c55e` : 'none',
+                    background: selectedTab == Tab.SPR_ANALYSIS ? '#0a0a0a' : 'transparent',
+                    color: selectedTab == Tab.SPR_ANALYSIS ? '#22c55e' : '#9ca3af',
+                    borderBottom: selectedTab == Tab.SPR_ANALYSIS ? `2px solid #22c55e` : 'none',
                   }}
                 >
                   SPR Analysis Terminal
                 </button>
                 {selectedNode && (
                   <button
-                    className="flex-1 px-4 py-3 text-sm transition-colors"
+                    className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
+                    onClick={() => handleSetPanel(Tab.VULNERABILITY_DETAILS)}
                     style={{
-                      background: '#0a0a0a',
-                      color: '#22c55e',
-                      borderBottom: `2px solid #22c55e`,
+                      background: selectedTab == Tab.VULNERABILITY_DETAILS ? '#0a0a0a' : 'transparent',
+                      color: selectedTab == Tab.VULNERABILITY_DETAILS ? '#22c55e' : '#9ca3af',
+                      borderBottom: selectedTab == Tab.VULNERABILITY_DETAILS ? `2px solid #22c55e` : 'none',
                     }}
                   >
                     Vulnerability Details
@@ -189,12 +237,12 @@ export default function App() {
                 )}
               </div>
               <div className="flex-1 overflow-hidden">
-                {!selectedNode ? (
+                {selectedTab == Tab.SPR_ANALYSIS ? (
                   <Terminal logs={logs} addLog={addLog} />
                 ) : (
                   <VulnerabilityPanel 
                     selectedNode={selectedNode} 
-                    onClose={handleClosePanel} 
+                    onClose={() => handleSetPanel(Tab.SPR_ANALYSIS)} 
                   />
                 )}
               </div>

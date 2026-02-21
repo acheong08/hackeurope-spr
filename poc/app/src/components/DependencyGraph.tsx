@@ -1,103 +1,24 @@
-import { useEffect, useContext } from 'react';
-import { SocketContext } from '../providers/SocketProvider';
 import {
   ReactFlow,
   Controls,
   Background,
-  useNodesState,
-  useEdgesState,
-  MarkerType,
   type Node,
   type Edge,
+  type OnNodesChange,
+  OnEdgesChange,
 } from '@xyflow/react';
-import type { Dependency } from '../types/Dependency';
-import { getLayoutedElements } from '../utils/getLayoutedElements';
 import { Progress } from './ui/progress';
 
-const safePkgStyle = {
-  background: '#22c55e',
-  color: '#000',
-  border: '2px solid #4ade80',
-  borderRadius: '8px',
-  padding: '10px',
-};
-
-const flaggedPkgStyle = {
-  background: '#ef4444',
-  color: '#fff',
-  border: '2px solid #dc2626',
-  borderRadius: '8px',
-  padding: '10px',
-};
-
-const dataGatheringPkgStyle = {
-  background: '#1f2937',
-  color: '#9ca3af',
-  border: '2px solid #374151',
-  borderRadius: '8px',
-  padding: '10px',
-};
-
 interface DependencyGraph {
-  progress: number
+  progress: number;
   onNodeClick: (nodeId: string) => void;
+  nodes: Node[];
+  edges: Edge[];
+  onNodesChange: OnNodesChange<Node>;
+  onEdgesChange: OnEdgesChange<Edge>;
 }
 
-export function DependencyGraph({ progress, onNodeClick  }: DependencyGraph) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const socket = useContext(SocketContext);
-
-  const constructDependencyGraph = (dependencies: Dependency[]) => {
-    for (const dependency of dependencies) {
-      updateGraph(dependency);
-    }
-  }
-
-  const updateGraph = (dependency: Dependency) => {
-    const newNode: Node = {
-      id: dependency.label,
-      type: 'default',
-      data: { label: dependency.label },
-      position: { x: 0, y: 0 },
-      style: dataGatheringPkgStyle
-    };
-    
-    let newEdge: Edge | null = null;
-    if (dependency.dependent) {
-      newEdge = {
-        id: `${dependency.dependent}-${dependency.label}`,
-        source: dependency.dependent,
-        target: dependency.label,
-        markerEnd: { type: MarkerType.ArrowClosed }
-      };
-    }
-
-    setEdges((curEdges: Edge[]) => {
-      const nextEdges = newEdge ? [...curEdges, newEdge] : curEdges;
-
-      setNodes((curNodes: Node[]) => {
-        const layoutedNodes = getLayoutedElements([...curNodes, newNode], nextEdges);
-        return layoutedNodes;
-      });
-
-      return nextEdges;
-    });
-  };
-
-  useEffect(() => {
-    socket?.on("dependency-graph", constructDependencyGraph);
-    constructDependencyGraph([
-      { label: 'kleur@4.1.5' }, 
-      { label: 'nanoid@3.3.10', dependent: 'kleur@4.1.5' }, 
-      { label: 'test@4.2.10', dependent: 'kleur@4.1.5' }
-    ]);
-
-    return () => {
-      socket?.off("dependency-graph", constructDependencyGraph);
-    }
-  }, [socket]);
-
+export function DependencyGraph({ progress, onNodeClick, nodes, edges, onNodesChange, onEdgesChange }: DependencyGraph) {
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b" style={{ 
@@ -140,7 +61,7 @@ export function DependencyGraph({ progress, onNodeClick  }: DependencyGraph) {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodeClick={(_, node) => onNodeClick(node.id)}
+        onNodeClick={(_, node: Node) => onNodeClick(node.id)}
         fitView
         style={{ background: '#0a0a0a' }}
       >
