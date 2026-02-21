@@ -41,6 +41,33 @@ func fetchStatsTool(ctx context.Context, input StatsInput, call fantasy.ToolCall
 	}, nil
 }
 
+type StatsPerProcessInput struct {
+	Collection string `json:"collection"`
+}
+
+func fetchStatsPerProcessTool(ctx context.Context, input StatsPerProcessInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+	fmt.Println("========================================")
+	fmt.Printf("[TOOL CALL] fetch_stats input: %+v\n", input)
+
+	url := fmt.Sprintf("http://localhost:8001/stats_per_process/%s", input.Collection)
+	resp, err := http.Get(url)
+	if err != nil {
+		return fantasy.ToolResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	output := string(bodyBytes)
+
+	fmt.Println("[TOOL OUTPUT] fetch_stats returned:")
+	fmt.Println(output)
+	fmt.Println("========================================")
+
+	return fantasy.ToolResponse{
+		Type:    string(fantasy.ContentTypeText),
+		Content: output,
+	}, nil
+}
 // ---------------- Tool: fetch_specific ----------------
 
 type SpecificInput struct {
@@ -97,6 +124,13 @@ func main() {
 Example: fetch_stats({"collection":"tracee_20260221_140853_51fac1"})`,
 		fetchStatsTool,
 	)
+	
+	statsPerProcessTool := fantasy.NewAgentTool(
+		"fetch_stats_per_process",
+		`Fetch summary stats per process for a Tracee collection.
+Example: fetch_stats_per_process({"collection":"tracee_20260221_140853_51fac1"})`,
+		fetchStatsPerProcessTool,
+	)
 
 	specificTool := fantasy.NewAgentTool(
 		"fetch_specific",
@@ -114,8 +148,9 @@ fetch_specific({"query":"tracee_...?...file=/etc/passwd"})`,
 You are a detailed npm supply chain security analyst.
 You will:
 1) Fetch summary stats with fetch_stats.
-2) If suspicious signals appear, fetch details with fetch_specific.
-3) EXPLAIN your reasoning step by step in your final response.
+2) Fetch stats per process to see what processes are being active
+3) If suspicious signals appear, fetch details with fetch_specific.
+4) EXPLAIN your reasoning step by step in your final response.
 
 Always show which tools you called (with examples) in your reasoning.
 `
@@ -123,7 +158,7 @@ Always show which tools you called (with examples) in your reasoning.
 	agent := fantasy.NewAgent(
 		model,
 		fantasy.WithSystemPrompt(systemPrompt),
-		fantasy.WithTools(statsTool, specificTool),
+		fantasy.WithTools(statsTool, statsPerProcessTool, specificTool),
 	)
 
 	// ---- User Prompt ----
