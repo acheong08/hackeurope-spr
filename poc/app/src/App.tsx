@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useRef } from "react";
 import { DependencyGraph } from "./components/DependencyGraph";
 import { Terminal } from "./components/Terminal";
 import { Analysis } from "./components/Analysis";
@@ -75,10 +75,21 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const { send, lastMessage, isConnected } = useContext(SocketContext);
+  const processedMessageIds = useRef<Set<string>>(new Set());
 
   // Listen for WebSocket messages
   useEffect(() => {
     if (!lastMessage) return;
+    
+    // Skip if we've already processed this message
+    if (lastMessage._id && processedMessageIds.current.has(lastMessage._id)) {
+      return;
+    }
+    
+    // Mark message as processed
+    if (lastMessage._id) {
+      processedMessageIds.current.add(lastMessage._id);
+    }
 
     switch (lastMessage.type) {
       case "dag": {
@@ -199,6 +210,9 @@ export default function App() {
     setSelectedTab(Tab.LOGS);
     setNodes([]);
     setEdges([]);
+    
+    // Clear processed message IDs for new analysis
+    processedMessageIds.current.clear();
 
     // Send analyze request
     addLog("→ Starting analysis...");

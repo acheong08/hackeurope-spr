@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -54,6 +55,30 @@ func NewPipeline(registryURL, registryToken, registryOwner, githubToken, repoOwn
 	}
 }
 
+// log sends a log message both to the WebSocket client and to the console
+func (p *Pipeline) log(message, level string) {
+	// Send to WebSocket client
+	p.sender.SendLog(message, level)
+
+	// Also log to console with level indicator
+	prefix := "[INFO]"
+	switch level {
+	case "success":
+		prefix = "[SUCCESS]"
+	case "warning":
+		prefix = "[WARN]"
+	case "error":
+		prefix = "[ERROR]"
+	}
+	log.Printf("%s %s", prefix, message)
+}
+
+// logf is a formatted version of log
+func (p *Pipeline) logf(format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	p.log(message, "info")
+}
+
 // Run executes the full analysis pipeline
 func (p *Pipeline) Run(ctx context.Context, packageJSONContent string) error {
 	// Create temp directory
@@ -64,7 +89,7 @@ func (p *Pipeline) Run(ctx context.Context, packageJSONContent string) error {
 	p.tempDir = tempDir
 	defer os.RemoveAll(tempDir)
 
-	p.sender.SendLog("Starting analysis...", "info")
+	p.log("Starting analysis...", "info")
 
 	// Step 1: Parse package.json and build DAG
 	p.sender.SendProgress(0, "dag", "Parsing package.json...")
@@ -82,7 +107,7 @@ func (p *Pipeline) Run(ctx context.Context, packageJSONContent string) error {
 
 	// Get direct dependencies for analysis
 	directDeps := graph.GetDirectDependencies()
-	p.sender.SendLog(fmt.Sprintf("Found %d direct dependencies to analyze", len(directDeps)), "info")
+	p.log(fmt.Sprintf("Found %d direct dependencies to analyze", len(directDeps)), "info")
 
 	// Step 2: Upload to unsafe registry (20% - 40%)
 	p.sender.SendProgress(20, "upload", "Uploading packages to registry...")
@@ -112,7 +137,7 @@ func (p *Pipeline) Run(ctx context.Context, packageJSONContent string) error {
 	// TODO: Call agent
 	p.sender.SendProgress(100, "agent", "Analysis complete")
 
-	p.sender.SendLog("Analysis pipeline complete", "success")
+	p.log("Analysis pipeline complete", "success")
 	return nil
 }
 
@@ -120,7 +145,7 @@ func (p *Pipeline) Run(ctx context.Context, packageJSONContent string) error {
 func (p *Pipeline) buildDAG(ctx context.Context, packageJSONContent, tempDir string) (*models.DependencyGraph, error) {
 	// Write package.json to temp directory
 	pkgPath := filepath.Join(tempDir, "package.json")
-	if err := os.WriteFile(pkgPath, []byte(packageJSONContent), 0644); err != nil {
+	if err := os.WriteFile(pkgPath, []byte(packageJSONContent), 0o644); err != nil {
 		return nil, fmt.Errorf("failed to write package.json: %w", err)
 	}
 
@@ -134,10 +159,10 @@ func (p *Pipeline) buildDAG(ctx context.Context, packageJSONContent, tempDir str
 		return nil, fmt.Errorf("failed to parse package.json: %w", err)
 	}
 
-	p.sender.SendLog(fmt.Sprintf("Analyzing: %s@%s", pkgJSON.Name, pkgJSON.Version), "info")
+	p.log(fmt.Sprintf("Analyzing: %s@%s", pkgJSON.Name, pkgJSON.Version), "info")
 
 	// Generate lockfile
-	p.sender.SendLog("Generating lockfile...", "info")
+	p.log("Generating lockfile...", "info")
 	lm := parser.NewLockfileManager()
 	lockfilePath, err := lm.GenerateLockfile(pkgPath)
 	if err != nil {
@@ -175,7 +200,7 @@ func (p *Pipeline) sendDAG(graph *models.DependencyGraph) error {
 	msg := NewDAGMessage(graph.RootPackage, nodes, edgeCount)
 	p.sender.SendMessage(msg)
 
-	p.sender.SendLog(fmt.Sprintf("DAG sent: %d nodes, %d edges", len(nodes), edgeCount), "success")
+	p.log(fmt.Sprintf("DAG sent: %d nodes, %d edges", len(nodes), edgeCount), "success")
 	return nil
 }
 
@@ -244,7 +269,7 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 	defer os.RemoveAll(tempDir)
 
 	outputDir := filepath.Join(tempDir, "artifacts")
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 

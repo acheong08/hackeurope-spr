@@ -1,8 +1,9 @@
-import { createContext, useState, useEffect, useCallback } from "react";
+import { createContext, useState, useEffect, useCallback, useRef } from "react";
 
 export interface WebSocketMessage {
   type: string;
   payload: any;
+  _id?: string; // Internal ID for deduplication
 }
 
 interface SocketContextType {
@@ -23,6 +24,8 @@ function SocketProvider({ children }: { children?: React.ReactNode }) {
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
+  const messageIdRef = useRef(0);
+  const processedMessages = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     // Connect to local server
@@ -36,6 +39,9 @@ function SocketProvider({ children }: { children?: React.ReactNode }) {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        // Add unique ID to each message for deduplication
+        const id = `${data.type}-${Date.now()}-${messageIdRef.current++}`;
+        data._id = id;
         setLastMessage(data);
       } catch (err) {
         console.error("Failed to parse message:", err);
