@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hackeurope/spr/pkg/models"
+	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
 // PackageJSON represents the structure of package.json

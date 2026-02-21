@@ -62,9 +62,9 @@ jobs:
           # Normalize package name for directory lookups (matches generator logic)
           pkg_name="${{ inputs.package }}"
           if [[ "$pkg_name" == @*/* ]]; then
-            # @scope/name → scope-name
+            # @scope/name → scope__name
             normalized="${pkg_name/@/}"
-            normalized="${normalized//\//-}"
+            normalized="${normalized//\//__}"
           else
             normalized="$pkg_name"
           fi
@@ -187,7 +187,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: behavior-${{ inputs.package }}-${{ inputs.version }}-${{ github.run_id }}
+          name: behavior-${{ steps.normalize.outputs.normalized }}-${{ inputs.version }}-${{ github.run_id }}
           path: /tmp/tracee-out/behavior.jsonl
           if-no-files-found: warn
           retention-days: 30
@@ -196,7 +196,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: debug-${{ inputs.package }}-${{ inputs.version }}-${{ github.run_id }}
+          name: debug-${{ steps.normalize.outputs.normalized }}-${{ inputs.version }}-${{ github.run_id }}
           path: |
             /tmp/tracee-out/
             dist/

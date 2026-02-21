@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hackeurope/spr/internal/tester"
+	"github.com/acheong08/hackeurope-spr/internal/tester"
 )
 
 // TestGenerateCommand generates test packages for behavioral analysis

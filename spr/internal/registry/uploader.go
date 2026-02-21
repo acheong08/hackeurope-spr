@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hackeurope/spr/pkg/models"
+	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
 // Uploader handles uploading packages to Gitea registry

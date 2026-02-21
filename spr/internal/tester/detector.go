@@ -196,11 +196,11 @@ func (d *Detector) GetPackageJSONType(info *PackageInfo) string {
 
 // NormalizePackageName normalizes package name for file paths
 func NormalizePackageName(name string) string {
-	// Replace @scope/name with scope-name
+	// Replace @scope/name with scope__name
 	if strings.HasPrefix(name, "@") {
 		parts := strings.SplitN(name, "/", 2)
 		if len(parts) == 2 {
-			return parts[0][1:] + "-" + parts[1]
+			return parts[0][1:] + "__" + parts[1]
 		}
 	}
 	return name

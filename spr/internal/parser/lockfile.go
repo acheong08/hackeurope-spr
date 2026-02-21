@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hackeurope/spr/pkg/models"
+	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
 // PackageLockV3 represents package-lock.json version 3 structure
@@ -84,6 +84,34 @@ func (lm *LockfileManager) GenerateLockfile(packageJSONPath string) (string, err
 	}
 
 	return lockfilePath, nil
+}
+
+// ExtractRootPackage extracts the root package info from a lockfile
+func (lm *LockfileManager) ExtractRootPackage(lockfilePath string) (*models.Package, error) {
+	data, err := os.ReadFile(lockfilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read lockfile: %w", err)
+	}
+
+	var lockfile PackageLockV3
+	if err := json.Unmarshal(data, &lockfile); err != nil {
+		return nil, fmt.Errorf("failed to parse lockfile: %w", err)
+	}
+
+	if lockfile.LockfileVersion != 3 {
+		return nil, fmt.Errorf("unsupported lockfile version: %d (expected 3)", lockfile.LockfileVersion)
+	}
+
+	// Root package is at path ""
+	if rootPkg, exists := lockfile.Packages[""]; exists {
+		return &models.Package{
+			ID:      "root@" + rootPkg.Version,
+			Name:    "root", // Package name not available in lockfile
+			Version: rootPkg.Version,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("root package not found in lockfile")
 }
 
 // ParseLockfile parses a package-lock.json file into a DependencyGraph
