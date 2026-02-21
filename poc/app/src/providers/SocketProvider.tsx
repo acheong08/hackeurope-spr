@@ -1,7 +1,7 @@
 import { createContext, useState, useEffect } from 'react';
 import io, { Socket } from "socket.io-client";
 
-export const UserContext = createContext<Socket | undefined>(undefined);
+export const SocketContext = createContext<Socket | undefined>(undefined);
 
 function SocketProvider({ children }: { children?: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket>();
@@ -22,9 +22,9 @@ function SocketProvider({ children }: { children?: React.ReactNode }) {
   }, [socket]);
 
   return (
-    <UserContext.Provider value={socket}>
+    <SocketContext.Provider value={socket}>
       {children}
-    </UserContext.Provider>
+    </SocketContext.Provider>
   );
 }
 export default SocketProvider;
