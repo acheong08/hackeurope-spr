@@ -1,4 +1,4 @@
-import { Upload, X, FileJson } from 'lucide-react';
+import { Upload, X, FileJson } from "lucide-react";
 
 interface FileUploadProps {
   uploadedFile: File | null;
@@ -6,14 +6,18 @@ interface FileUploadProps {
   onFileRemove: () => void;
 }
 
-export function FileUpload({ uploadedFile, onFileUpload, onFileRemove }: FileUploadProps) {
+export function FileUpload({
+  uploadedFile,
+  onFileUpload,
+  onFileRemove,
+}: FileUploadProps) {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (file.name.endsWith('.json') || file.type === 'application/json') {
+      if (file.name.endsWith(".json") || file.type === "application/json") {
         onFileUpload(file);
       } else {
-        alert('Please upload a valid package.json file');
+        alert("Please upload a valid package.json file");
       }
     }
   };
@@ -21,11 +25,11 @@ export function FileUpload({ uploadedFile, onFileUpload, onFileRemove }: FileUpl
   return (
     <div className="flex items-center gap-3">
       {!uploadedFile ? (
-        <label 
+        <label
           className="flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all hover:opacity-80"
           style={{
-            background: '#22c55e',
-            color: '#000',
+            background: "#22c55e",
+            color: "#000",
           }}
         >
           <Upload className="w-4 h-4" />
@@ -38,24 +42,24 @@ export function FileUpload({ uploadedFile, onFileUpload, onFileRemove }: FileUpl
           />
         </label>
       ) : (
-        <div 
+        <div
           className="flex items-center gap-3 px-4 py-2 rounded-lg"
           style={{
-            background: '#111827',
-            border: '1px solid #22c55e',
+            background: "#111827",
+            border: "1px solid #22c55e",
           }}
         >
-          <FileJson className="w-4 h-4" style={{ color: '#22c55e' }} />
-          <span className="text-sm" style={{ color: '#22c55e' }}>
+          <FileJson className="w-4 h-4" style={{ color: "#22c55e" }} />
+          <span className="text-sm" style={{ color: "#22c55e" }}>
             {uploadedFile.name}
           </span>
-          <span className="text-xs" style={{ color: '#9ca3af' }}>
+          <span className="text-xs" style={{ color: "#9ca3af" }}>
             ({(uploadedFile.size / 1024).toFixed(2)} KB)
           </span>
           <button
             onClick={onFileRemove}
             className="p-1 rounded transition-colors hover:bg-red-500/20"
-            style={{ color: '#ef4444' }}
+            style={{ color: "#ef4444" }}
             aria-label="Remove file"
           >
             <X className="w-4 h-4" />

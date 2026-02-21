@@ -1,5 +1,4 @@
-
 export type Dependency = {
-    label: string;
-    dependent?: string;
+  label: string;
+  dependent?: string;
 };
