@@ -308,39 +308,13 @@ func runCheckCommand(args []string) {
 		time.Duration(timeoutMinutes)*time.Minute,
 	)
 
-	_, err = orch.RunPackages(ctx, packagesToAnalyze, tempDir)
+	_, err = orch.RunPackages(ctx, packagesToAnalyze, tempDir, outputDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nAnalysis failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Copy artifacts from temp to output directory
-	fmt.Printf("\nCopying artifacts to %s...\n", outputDir)
-
-	entries, err := os.ReadDir(tempDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading temp directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	copiedCount := 0
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		srcPath := tempDir + "/" + entry.Name()
-		dstPath := outputDir + "/" + entry.Name()
-
-		if err := copyDir(srcPath, dstPath); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to copy %s: %v\n", entry.Name(), err)
-			continue
-		}
-		copiedCount++
-	}
-
-	fmt.Printf("\nAnalysis complete: %d/%d packages analyzed successfully\n", copiedCount, len(packagesToAnalyze))
-	fmt.Printf("Artifacts saved to: %s\n", outputDir)
+	fmt.Printf("\nAnalysis complete. Artifacts saved to: %s\n", outputDir)
 }
 
 func printCheckUsage() {
@@ -363,39 +337,6 @@ func printCheckUsage() {
 	fmt.Println("  -concurrency <n>       Max concurrent workflows (default: 5)")
 	fmt.Println("  -timeout <minutes>     Timeout per workflow in minutes (default: 5)")
 	fmt.Println("  -help                  Show this help message")
-}
-
-// copyDir recursively copies a directory
-func copyDir(src, dst string) error {
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		srcPath := src + "/" + entry.Name()
-		dstPath := dst + "/" + entry.Name()
-
-		if entry.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			data, err := os.ReadFile(srcPath)
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 func runTestCommand(args []string) {

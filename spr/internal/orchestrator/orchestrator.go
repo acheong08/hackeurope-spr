@@ -43,12 +43,16 @@ func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, t
 }
 
 // RunPackages triggers workflows for all packages and collects results
-func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Package, tempDir string) ([]PackageResult, error) {
+func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Package, tempDir string, outputDir string) ([]PackageResult, error) {
 	if len(packages) == 0 {
 		return nil, fmt.Errorf("no packages to analyze")
 	}
 
 	fmt.Printf("Starting analysis of %d packages (max %d concurrent)\n", len(packages), o.concurrency)
+
+	// Create a cancellable context for early termination
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// Create channels for work distribution and result collection
 	workChan := make(chan models.Package, len(packages))
@@ -60,10 +64,6 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 	}
 	close(workChan)
 
-	// Create error channel for early termination
-	errChan := make(chan error, 1)
-	stopChan := make(chan struct{})
-
 	// Create worker pool
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, o.concurrency)
@@ -72,7 +72,7 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			o.worker(ctx, workerID, workChan, resultChan, stopChan, semaphore, tempDir, errChan)
+			o.worker(ctx, cancel, workerID, workChan, resultChan, semaphore, tempDir, outputDir)
 		}(i)
 	}
 
@@ -91,6 +91,8 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 		completed++
 		if result.Error != nil {
 			failed++
+			// Cancel context on first failure (fail-fast)
+			cancel()
 		}
 		results = append(results, result)
 		fmt.Printf("  [%d/%d] %s@%s - ", completed, len(packages), result.Package.Name, result.Package.Version)
@@ -113,10 +115,11 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 }
 
 // worker processes packages from the work channel
-func (o *Orchestrator) worker(ctx context.Context, workerID int, workChan <-chan models.Package, resultChan chan<- PackageResult, stopChan <-chan struct{}, semaphore chan struct{}, tempDir string, errChan chan<- error) {
+func (o *Orchestrator) worker(ctx context.Context, cancel context.CancelFunc, workerID int, workChan <-chan models.Package, resultChan chan<- PackageResult, semaphore chan struct{}, tempDir string, outputDir string) {
 	for pkg := range workChan {
+		// Check if context is cancelled before acquiring semaphore
 		select {
-		case <-stopChan:
+		case <-ctx.Done():
 			resultChan <- PackageResult{
 				Package: pkg,
 				Success: false,
@@ -127,23 +130,15 @@ func (o *Orchestrator) worker(ctx context.Context, workerID int, workChan <-chan
 		}
 
 		semaphore <- struct{}{} // Acquire
-		result := o.analyzePackage(ctx, pkg, tempDir)
+		result := o.analyzePackage(ctx, pkg, tempDir, outputDir)
 		<-semaphore // Release
-
-		if result.Error != nil {
-			// Signal other workers to stop
-			select {
-			case errChan <- result.Error:
-			default:
-			}
-		}
 
 		resultChan <- result
 	}
 }
 
 // analyzePackage triggers workflow, polls for completion, and downloads artifacts
-func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, tempDir string) PackageResult {
+func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, tempDir string, outputDir string) PackageResult {
 	result := PackageResult{
 		Package: pkg,
 	}
@@ -183,6 +178,25 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 		return result
 	}
 
+	// 5. Copy artifacts to output directory immediately (non-blocking)
+	if len(artifacts) > 0 && outputDir != "" {
+		go func(artifactPaths []string, pkgName, pkgVersion string) {
+			pkgOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", pkgName, pkgVersion))
+			if err := os.MkdirAll(pkgOutputDir, 0o755); err != nil {
+				log.Printf("    [Worker] Warning: failed to create output directory for %s@%s: %v\n", pkgName, pkgVersion, err)
+				return
+			}
+
+			for _, artifactPath := range artifactPaths {
+				destPath := filepath.Join(pkgOutputDir, filepath.Base(artifactPath))
+				if err := copyDir(artifactPath, destPath); err != nil {
+					log.Printf("    [Worker] Warning: failed to copy artifact %s: %v\n", artifactPath, err)
+				}
+			}
+			log.Printf("    [Worker] Copied %d artifacts for %s@%s to output\n", len(artifactPaths), pkgName, pkgVersion)
+		}(artifacts, pkg.Name, pkg.Version)
+	}
+
 	result.Success = true
 	result.Artifacts = artifacts
 	return result
@@ -200,6 +214,9 @@ func (o *Orchestrator) pollWorkflowCompletion(ctx context.Context, runID int64) 
 	for {
 		select {
 		case <-ctx.Done():
+			if ctx.Err() == context.Canceled {
+				return nil, fmt.Errorf("workflow polling cancelled")
+			}
 			return nil, fmt.Errorf("timeout waiting for workflow completion")
 		default:
 		}
@@ -222,7 +239,15 @@ func (o *Orchestrator) pollWorkflowCompletion(ctx context.Context, runID int64) 
 			delay = maxDelay
 		}
 
-		time.Sleep(delay)
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.Canceled {
+				return nil, fmt.Errorf("workflow polling cancelled")
+			}
+			return nil, fmt.Errorf("timeout waiting for workflow completion")
+		case <-time.After(delay):
+			// Continue polling
+		}
 	}
 }
 
@@ -316,4 +341,37 @@ func isSubPath(path, base string) bool {
 		return false
 	}
 	return !filepath.IsAbs(rel) && rel != ".." && !filepath.HasPrefix(rel, "..")
+}
+
+// copyDir recursively copies a directory
+func copyDir(src, dst string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
