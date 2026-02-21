@@ -15,6 +15,9 @@ func TestGenerateCommand(args []string) {
 		packageVersion = ""
 		outputDir      = "./test-packages"
 		templatesDir   = ""
+		registryURL    = "https://git.duti.dev"
+		registryOwner  = "acheong08"
+		registryToken  = ""
 	)
 
 	// Parse flags
@@ -40,6 +43,21 @@ func TestGenerateCommand(args []string) {
 				templatesDir = args[i+1]
 				i++
 			}
+		case "--registry-url":
+			if i+1 < len(args) {
+				registryURL = args[i+1]
+				i++
+			}
+		case "--registry-owner":
+			if i+1 < len(args) {
+				registryOwner = args[i+1]
+				i++
+			}
+		case "--registry-token":
+			if i+1 < len(args) {
+				registryToken = args[i+1]
+				i++
+			}
 		}
 	}
 
@@ -61,17 +79,25 @@ func TestGenerateCommand(args []string) {
 		fmt.Fprintln(os.Stderr, "Usage: spr test generate --package <name> --version <version> [options]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Options:")
-		fmt.Fprintln(os.Stderr, "  -p, --package <name>      Package name (required)")
-		fmt.Fprintln(os.Stderr, "  -v, --version <version>   Package version (required)")
-		fmt.Fprintln(os.Stderr, "  -o, --output <dir>        Output directory (default: ./test-packages)")
-		fmt.Fprintln(os.Stderr, "  -t, --templates <dir>     Templates directory (default: ./templates)")
+		fmt.Fprintln(os.Stderr, "  -p, --package <name>       Package name (required)")
+		fmt.Fprintln(os.Stderr, "  -v, --version <version>    Package version (required)")
+		fmt.Fprintln(os.Stderr, "  -o, --output <dir>         Output directory (default: ./test-packages)")
+		fmt.Fprintln(os.Stderr, "  -t, --templates <dir>      Templates directory (default: ./templates)")
+		fmt.Fprintln(os.Stderr, "  --registry-url <url>       Registry URL (default: https://git.duti.dev)")
+		fmt.Fprintln(os.Stderr, "  --registry-owner <owner>   Registry owner (default: acheong08)")
+		fmt.Fprintln(os.Stderr, "  --registry-token <token>   Registry token (optional, uses npm registry if not set)")
 		os.Exit(1)
 	}
 
 	fmt.Printf("🔍 Detecting package type for %s@%s...\n", packageName, packageVersion)
 
-	// Create generator
-	generator := tester.NewGenerator(templatesDir)
+	// Create generator with registry configuration
+	var generator *tester.Generator
+	if registryOwner != "" {
+		generator = tester.NewGeneratorWithRegistry(templatesDir, registryURL, registryOwner, registryToken)
+	} else {
+		generator = tester.NewGenerator(templatesDir)
+	}
 
 	// Generate all test packages
 	fmt.Printf("📝 Generating test packages...\n")

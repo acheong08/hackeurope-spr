@@ -13,7 +13,8 @@ on:
         type: string
 
 env:
-  REGISTRY_URL: https://git.duti.dev/api/packages/acheong08/npm/
+  REGISTRY_URL: https://git.duti.dev
+  REGISTRY_OWNER: acheong08
   TRACEE_VERSION: v0.24.1
 
 jobs:
@@ -52,7 +53,9 @@ jobs:
           ./spr/spr test generate \
             --package "${{ inputs.package }}" \
             --version "${{ inputs.version }}" \
-            --output ./test-pkg
+            --output ./test-pkg \
+            --registry-url "${{ env.REGISTRY_URL }}" \
+            --registry-owner "${{ env.REGISTRY_OWNER }}"
           echo "✅ Test package generated"
           ls -la ./test-pkg/
 
@@ -85,7 +88,7 @@ jobs:
           echo "Creating isolated container..."
           docker run -d --name analysis \
             --network host \
-            -e NPM_CONFIG_REGISTRY=${{ env.REGISTRY_URL }} \
+            -e NPM_CONFIG_REGISTRY=${{ env.REGISTRY_URL }}/api/packages/${{ env.REGISTRY_OWNER }}/npm/ \
             node:20 sleep 3600
           
           echo "✅ Container created"

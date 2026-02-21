@@ -37,8 +37,11 @@ type TestPackage struct {
 
 // Generator creates test packages for behavioral analysis
 type Generator struct {
-	templatesDir string
-	detector     *Detector
+	templatesDir  string
+	detector      *Detector
+	registryURL   string
+	registryOwner string
+	registryToken string
 }
 
 // NewGenerator creates a new test package generator
@@ -46,6 +49,17 @@ func NewGenerator(templatesDir string) *Generator {
 	return &Generator{
 		templatesDir: templatesDir,
 		detector:     NewDetector(),
+	}
+}
+
+// NewGeneratorWithRegistry creates a new test package generator with custom registry
+func NewGeneratorWithRegistry(templatesDir, registryURL, registryOwner, registryToken string) *Generator {
+	return &Generator{
+		templatesDir:  templatesDir,
+		detector:      NewDetectorWithRegistry(registryURL, registryOwner, registryToken),
+		registryURL:   registryURL,
+		registryOwner: registryOwner,
+		registryToken: registryToken,
 	}
 }
 

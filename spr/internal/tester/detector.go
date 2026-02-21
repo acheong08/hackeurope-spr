@@ -54,7 +54,10 @@ type RegistryPackage struct {
 // Detector analyzes npm packages to determine their type
 // and available attack surfaces
 type Detector struct {
-	HTTPClient *http.Client
+	HTTPClient    *http.Client
+	RegistryURL   string
+	RegistryOwner string
+	RegistryToken string
 }
 
 // NewDetector creates a new package detector
@@ -63,16 +66,44 @@ func NewDetector() *Detector {
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		RegistryURL:   "https://registry.npmjs.org",
+		RegistryOwner: "",
+		RegistryToken: "",
+	}
+}
+
+// NewDetectorWithRegistry creates a new package detector with custom registry settings
+func NewDetectorWithRegistry(registryURL, registryOwner, registryToken string) *Detector {
+	return &Detector{
+		HTTPClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		RegistryURL:   registryURL,
+		RegistryOwner: registryOwner,
+		RegistryToken: registryToken,
 	}
 }
 
 // DetectPackage fetches and analyzes package metadata from npm registry
 func (d *Detector) DetectPackage(name, version string) (*PackageInfo, error) {
-	url := fmt.Sprintf("https://registry.npmjs.org/%s", name)
+	var url string
+	if d.RegistryOwner != "" {
+		// Use Gitea registry format: /api/packages/{owner}/npm/{packageName}
+		pkgPath := normalizePackageName(name)
+		url = fmt.Sprintf("%s/api/packages/%s/npm/%s", d.RegistryURL, d.RegistryOwner, pkgPath)
+	} else {
+		// Use standard npm registry
+		url = fmt.Sprintf("%s/%s", d.RegistryURL, name)
+	}
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add authorization header if token is provided
+	if d.RegistryToken != "" {
+		req.Header.Set("Authorization", "Bearer "+d.RegistryToken)
 	}
 
 	resp, err := d.HTTPClient.Do(req)
@@ -194,9 +225,9 @@ func (d *Detector) GetPackageJSONType(info *PackageInfo) string {
 	}
 }
 
-// NormalizePackageName normalizes package name for file paths
-func NormalizePackageName(name string) string {
-	// Replace @scope/name with scope__name
+// normalizePackageName normalizes package name for URLs
+func normalizePackageName(name string) string {
+	// Replace @scope/name with scope__name for Gitea URLs
 	if strings.HasPrefix(name, "@") {
 		parts := strings.SplitN(name, "/", 2)
 		if len(parts) == 2 {
@@ -204,4 +235,9 @@ func NormalizePackageName(name string) string {
 		}
 	}
 	return name
+}
+
+// NormalizePackageName normalizes package name for file paths
+func NormalizePackageName(name string) string {
+	return normalizePackageName(name)
 }
