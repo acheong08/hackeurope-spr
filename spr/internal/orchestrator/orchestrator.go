@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/acheong08/hackeurope-spr/internal/tester"
 	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
@@ -189,7 +190,8 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 			default:
 			}
 
-			pkgOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", pkgName, pkgVersion))
+			normalizedPkgName := tester.NormalizePackageName(pkgName)
+			pkgOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", normalizedPkgName, pkgVersion))
 			if err := os.MkdirAll(pkgOutputDir, 0o755); err != nil {
 				log.Printf("    [Worker] Warning: failed to create output directory for %s@%s: %v\n", pkgName, pkgVersion, err)
 				return
@@ -267,7 +269,8 @@ func (o *Orchestrator) downloadArtifacts(ctx context.Context, runID int64, pkg m
 	}
 
 	var downloaded []string
-	pkgDir := filepath.Join(tempDir, fmt.Sprintf("%s@%s", pkg.Name, pkg.Version))
+	normalizedName := tester.NormalizePackageName(pkg.Name)
+	pkgDir := filepath.Join(tempDir, fmt.Sprintf("%s@%s", normalizedName, pkg.Version))
 
 	for _, artifact := range artifacts {
 		if artifact.Expired {
