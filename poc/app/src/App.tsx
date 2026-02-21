@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { DependencyGraph } from './components/DependencyGraph';
 import { Terminal } from './components/Terminal';
-import { RotateCcw } from 'lucide-react';
+import Header from './components/Header';
+import SocketProvider from './providers/SocketProvider';
 
 export default function App() {
   const [progress, setProgress] = useState(0);
@@ -68,62 +69,27 @@ export default function App() {
   }, [analysisKey]);
 
   return (
-    <div 
+    <SocketProvider>
+      <div 
       className="h-screen flex flex-col"
       style={{ 
         background: '#0a0a0a',
         color: '#22c55e'
       }}
-    >
-      <header 
-        className="border-b px-4 md:px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3"
-        style={{ 
-          borderColor: '#374151',
-          background: '#111827'
-        }}
       >
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: '#22c55e' }}>
-              <span className="text-lg" style={{ color: '#000' }}>S</span>
-            </div>
-            <h1 className="text-xl md:text-2xl" style={{ color: '#22c55e' }}>
-              HackEurope SPR
-            </h1>
-          </div>
-          <span className="text-xs md:text-sm px-2 py-1 rounded" style={{ 
-            background: '#374151',
-            color: '#9ca3af'
-          }}>
-            Supply Chain Package Registry
-          </span>
-        </div>
-        <div className="flex gap-2 self-end md:self-auto">
-          <button
-            onClick={restartAnalysis}
-            className="p-2 rounded-lg transition-colors hover:bg-opacity-80"
-            style={{ 
-              background: '#374151',
-              color: '#22c55e'
-            }}
-            aria-label="Restart Analysis"
+        <Header restartAnalysis={restartAnalysis} />
+        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 overflow-hidden">
+          <div 
+            className="h-1/2 lg:h-full border-b lg:border-b-0 lg:border-r"
+            style={{ borderColor: '#374151' }}
           >
-            <RotateCcw className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
-
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 overflow-hidden">
-        <div 
-          className="h-1/2 lg:h-full border-b lg:border-b-0 lg:border-r"
-          style={{ borderColor: '#374151' }}
-        >
-          <DependencyGraph progress={progress} />
-        </div>
-        <div className="h-1/2 lg:h-full">
-          <Terminal logs={logs} />
+            <DependencyGraph progress={progress} />
+          </div>
+          <div className="h-1/2 lg:h-full">
+            <Terminal logs={logs} />
+          </div>
         </div>
       </div>
-    </div>
+    </SocketProvider>
   );
 }
