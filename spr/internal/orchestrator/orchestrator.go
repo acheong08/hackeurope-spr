@@ -154,22 +154,17 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 		"version": pkg.Version,
 	}
 
-	run, err := o.client.TriggerWorkflow(ctx, o.workflowFile, inputs)
+	triggerResp, err := o.client.TriggerWorkflow(ctx, o.workflowFile, inputs)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to trigger workflow: %w", err)
 		return result
 	}
 
-	if run == nil {
-		result.Error = fmt.Errorf("workflow triggered but run ID not returned")
-		return result
-	}
-
-	result.RunID = run.ID
-	fmt.Printf("    [Worker] Triggered workflow for %s@%s (run ID: %d)\n", pkg.Name, pkg.Version, run.ID)
+	result.RunID = triggerResp.RunID
+	fmt.Printf("    [Worker] Triggered workflow for %s@%s (run ID: %d)\n", pkg.Name, pkg.Version, triggerResp.RunID)
 
 	// 2. Poll for completion
-	run, err = o.pollWorkflowCompletion(ctx, run.ID)
+	run, err := o.pollWorkflowCompletion(ctx, triggerResp.RunID)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to wait for completion: %w", err)
 		return result

@@ -28,7 +28,14 @@ func NewGitHubClient(token, owner, repo string) *GitHubClient {
 	}
 }
 
-// WorkflowRun represents a GitHub Actions workflow run
+// WorkflowRunResponse represents the response from triggering a workflow
+type WorkflowRunResponse struct {
+	RunID   int64  `json:"workflow_run_id"`
+	RunURL  string `json:"run_url"`
+	HTMLURL string `json:"html_url"`
+}
+
+// WorkflowRun represents a GitHub Actions workflow run (used for polling)
 type WorkflowRun struct {
 	ID         int64     `json:"id"`
 	Status     string    `json:"status"`
@@ -39,7 +46,7 @@ type WorkflowRun struct {
 }
 
 // TriggerWorkflow dispatches a workflow run
-func (c *GitHubClient) TriggerWorkflow(ctx context.Context, workflowFile string, inputs map[string]string) (*WorkflowRun, error) {
+func (c *GitHubClient) TriggerWorkflow(ctx context.Context, workflowFile string, inputs map[string]string) (*WorkflowRunResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/workflows/%s/dispatches",
 		c.Owner, c.Repo, workflowFile)
 
@@ -78,12 +85,16 @@ func (c *GitHubClient) TriggerWorkflow(ctx context.Context, workflowFile string,
 
 	if resp.StatusCode == http.StatusNoContent {
 		// Workflow triggered but no run details returned
-		return nil, nil
+		return nil, fmt.Errorf("API returned 204 - run details not available. Ensure GitHub API supports return_run_details")
 	}
 
-	var run WorkflowRun
+	var run WorkflowRunResponse
 	if err := json.Unmarshal(body, &run); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if run.RunID == 0 {
+		return nil, fmt.Errorf("API returned run ID 0 - workflow may not have triggered properly")
 	}
 
 	return &run, nil
