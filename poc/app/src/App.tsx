@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useContext } from "react";
 import { DependencyGraph } from "./components/DependencyGraph";
 import { Terminal } from "./components/Terminal";
 import { Analysis } from "./components/Analysis";
 import { Data } from "./components/Data";
 import Header from "./components/Header";
+import { SocketContext } from "./providers/SocketProvider";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -16,7 +17,6 @@ import {
   type Node,
   type Edge,
 } from "@xyflow/react";
-import type { Dependency } from "./types/Dependency";
 import { getLayoutedElements } from "./utils/getLayoutedElements";
 
 enum Tab {
@@ -49,6 +49,15 @@ const dataGatheringPkgStyle = {
   padding: "10px",
 };
 
+interface PackageNode {
+  ID: string;
+  Name: string;
+  Version: string;
+  Resolved: string;
+  Integrity: string;
+  Dependencies: Record<string, string>;
+}
+
 export default function App() {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
@@ -57,17 +66,139 @@ export default function App() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [packageData, setPackageData] = useState<any>(null);
+  const [packageContent, setPackageContent] = useState<string>("");
 
   const [selectedTab, setSelectedTab] = useState<Tab>(Tab.LOGS);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
+  const { send, lastMessage, isConnected } = useContext(SocketContext);
+
+  // Listen for WebSocket messages
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    switch (lastMessage.type) {
+      case "dag": {
+        // Received DAG data - build the graph
+        const payload = lastMessage.payload as {
+          root_package: { ID: string; Name: string; Version: string };
+          nodes: PackageNode[];
+          edge_count: number;
+        };
+        
+        // Build nodes from DAG
+        const newNodes: Node[] = payload.nodes.map((pkg) => ({
+          id: pkg.ID,
+          type: "default",
+          data: { label: `${pkg.Name}@${pkg.Version}` },
+          position: { x: 0, y: 0 },
+          style: dataGatheringPkgStyle,
+        }));
+
+        // Build edges from dependencies
+        const newEdges: Edge[] = [];
+        const rootId = payload.root_package.ID;
+        
+        payload.nodes.forEach((pkg) => {
+          // Check if this package is a direct dependency of root
+          if (pkg.Dependencies && Object.keys(pkg.Dependencies).length > 0) {
+            // This is likely the root or has deps
+            Object.entries(pkg.Dependencies).forEach(([depName]) => {
+              // Find the dependent node
+              const dependentNode = payload.nodes.find(n => n.Name === depName);
+              if (dependentNode) {
+                newEdges.push({
+                  id: `${pkg.ID}-${dependentNode.ID}`,
+                  source: pkg.ID,
+                  target: dependentNode.ID,
+                  markerEnd: { type: MarkerType.ArrowClosed },
+                });
+              }
+            });
+          }
+        });
+
+        // Layout the graph
+        const layoutedNodes = getLayoutedElements(newNodes, newEdges);
+        setNodes(layoutedNodes);
+        setEdges(newEdges);
+        
+        addLog(`✓ DAG received: ${payload.nodes.length} packages, ${newEdges.length} dependencies`);
+        break;
+      }
+      
+      case "progress": {
+        const payload = lastMessage.payload as { percent: number; stage: string; message: string };
+        setProgress(payload.percent);
+        break;
+      }
+      
+      case "package_status": {
+        const payload = lastMessage.payload as { package_id: string; status: string };
+        // Update node styling based on status
+        setNodes((currentNodes) =>
+          currentNodes.map((node) => {
+            if (node.id === payload.package_id) {
+              const style =
+                payload.status === "complete"
+                  ? safePkgStyle
+                  : payload.status === "failed"
+                  ? flaggedPkgStyle
+                  : dataGatheringPkgStyle;
+              return { ...node, style };
+            }
+            return node;
+          })
+        );
+        break;
+      }
+      
+      case "complete": {
+        const payload = lastMessage.payload as { success: boolean; message: string };
+        if (payload.success) {
+          addLog(`✓ ${payload.message}`);
+        } else {
+          addLog(`✗ ${payload.message}`);
+        }
+        break;
+      }
+      
+      case "error": {
+        const payload = lastMessage.payload as { message: string };
+        addLog(`✗ Error: ${payload.message}`);
+        break;
+      }
+    }
+  }, [lastMessage]);
+
   const startAnalysis = () => {
+    if (!packageContent) {
+      addLog("⚠ Please upload a package.json file first");
+      return;
+    }
+    
+    if (!isConnected) {
+      addLog("⚠ WebSocket not connected");
+      return;
+    }
+
     setProgress(0);
     setLogs([]);
     setAnalysisKey((prev) => prev + 1);
     setSelectedTab(Tab.LOGS);
+    setNodes([]);
+    setEdges([]);
+
+    // Send analyze request
+    addLog("→ Starting analysis...");
+    send({
+      type: "analyze",
+      payload: {
+        package_json: packageContent,
+      },
+    });
   };
 
   const addLog = (log: string) => {
@@ -96,15 +227,19 @@ export default function App() {
         const content = e.target?.result as string;
         const json = JSON.parse(content);
         setPackageData(json);
+        setPackageContent(content);
 
         setLogs((prev) => [
           ...prev,
-          `\n> Uploaded: ${file.name}`,
-          `> Ready to analyze package with ${Object.keys(json.dependencies || {}).length + Object.keys(json.devDependencies || {}).length} dependencies`,
+          `> Uploaded: ${file.name}`,
+          `> Package: ${json.name}@${json.version}`,
+          `> Dependencies: ${Object.keys(json.dependencies || {}).length + Object.keys(json.devDependencies || {}).length}`,
+          `> Ready to analyze - click "Start Analysis"`,
         ]);
       } catch (error) {
         alert("Error parsing package.json: " + (error as Error).message);
         setUploadedFile(null);
+        setPackageContent("");
       }
     };
     reader.readAsText(file);
@@ -113,46 +248,7 @@ export default function App() {
   const handleFileRemove = () => {
     setUploadedFile(null);
     setPackageData(null);
-  };
-
-  const constructDependencyGraph = (dependencies: Dependency[]) => {
-    for (const dependency of dependencies) {
-      updateGraph(dependency);
-    }
-  };
-
-  const updateGraph = (dependency: Dependency) => {
-    const newNode: Node = {
-      id: dependency.label,
-      type: "default",
-      data: { label: dependency.label },
-      position: { x: 0, y: 0 },
-      style: dataGatheringPkgStyle,
-    };
-
-    let newEdge: Edge | null = null;
-    if (dependency.dependent) {
-      newEdge = {
-        id: `${dependency.dependent}-${dependency.label}`,
-        source: dependency.dependent,
-        target: dependency.label,
-        markerEnd: { type: MarkerType.ArrowClosed },
-      };
-    }
-
-    setEdges((curEdges: Edge[]) => {
-      const nextEdges = newEdge ? [...curEdges, newEdge] : curEdges;
-
-      setNodes((curNodes: Node[]) => {
-        const layoutedNodes = getLayoutedElements(
-          [...curNodes, newNode],
-          nextEdges,
-        );
-        return layoutedNodes;
-      });
-
-      return nextEdges;
-    });
+    setPackageContent("");
   };
 
   return (
@@ -168,6 +264,7 @@ export default function App() {
         uploadedFile={uploadedFile}
         onFileUpload={handleFileUpload}
         onFileRemove={handleFileRemove}
+        isConnected={isConnected}
       />
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal" className="h-full">

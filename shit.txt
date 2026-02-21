@@ -1,0 +1,23 @@
+ ┃  Current demo goal:                                                                                                                     
+  ┃  [Front end]                                                                                                                            
+  ┃  - User uploads package.json                                                                                                            
+  ┃  - Connect to back-end via websocket                                                                                                    
+  ┃  - Send package.json                                                                                                                    
+  ┃  [Back end]                                                                                                                             
+  ┃  - Takes package.json, get lockfile, build dependency DAG                                                                               
+  ┃  - Send DAG to front-end                                                                                                                
+  ┃  [Front end]                                                                                                                            
+  ┃  - Visualize DAG                                                                                                                        
+  ┃  [Back end]                                                                                                                             
+  ┃  - Upload packages to unsafe registry (send progress logs via ws)                                                                       
+  ┃  - Run GitHub actions to collect behavior data (send progress logs via ws)                                                              
+  ┃  - Aggregate and clean data (see @spr/mongo/main.py as example.)                                                                        
+  ┃  - Send aggregate data to front end via ws                                                                                              
+  ┃  [Front end]                                                                                                                            
+  ┃  - Visualize aggregate data                                                                                                             
+  ┃  [Back end]                                                                                                                          ▄  
+  ┃  - Run through agent (See @spr/agent/agent.go as example)                                                                               
+  ┃  - Logs from agent (thinking, tool calls, etc) ws to front-end                                                                          
+  ┃  - Agent makes decision. Send decision to front-end                                                                                     
+  ┃  - If safe, copy packages from unsafe registry to safe registry (same registry, just under different username and uses a different      
+  ┃  key)  

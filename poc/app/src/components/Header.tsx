@@ -1,4 +1,4 @@
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Wifi, WifiOff } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 
 interface HeaderProps {
@@ -6,6 +6,7 @@ interface HeaderProps {
   uploadedFile: File | null;
   onFileUpload: (file: File) => void;
   onFileRemove: () => void;
+  isConnected: boolean;
 }
 
 function Header({
@@ -13,6 +14,7 @@ function Header({
   uploadedFile,
   onFileUpload,
   onFileRemove,
+  isConnected,
 }: HeaderProps) {
   return (
     <header
@@ -45,6 +47,16 @@ function Header({
         >
           Supply Chain Package Registry
         </span>
+        <div
+          className="flex items-center gap-1 text-xs px-2 py-1 rounded"
+          style={{
+            background: isConnected ? "#064e3b" : "#7f1d1d",
+            color: isConnected ? "#22c55e" : "#ef4444",
+          }}
+        >
+          {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+          <span>{isConnected ? "Connected" : "Disconnected"}</span>
+        </div>
       </div>
 
       <div className="flex gap-3 items-center self-end md:self-auto">

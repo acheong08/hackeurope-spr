@@ -8,7 +8,7 @@ interface TerminalProps {
 
 export function Terminal({ logs, addLog }: TerminalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const socket = useContext(SocketContext);
+  const { lastMessage } = useContext(SocketContext);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -33,12 +33,17 @@ export function Terminal({ logs, addLog }: TerminalProps) {
     return "#4ade80";
   };
 
+  // Listen for log messages from WebSocket
   useEffect(() => {
-    socket?.on("log", addLog);
-    return () => {
-      socket?.off("log", addLog);
-    };
-  }, [socket]);
+    if (lastMessage && lastMessage.type === "log") {
+      const payload = lastMessage.payload as { message: string; level?: string };
+      const prefix = payload.level === "success" ? "✓ " : 
+                      payload.level === "warning" ? "⚠ " : 
+                      payload.level === "error" ? "✗ " : 
+                      payload.level === "info" ? "→ " : "";
+      addLog(`${prefix}${payload.message}`);
+    }
+  }, [lastMessage, addLog]);
 
   return (
     <div className="h-full flex flex-col">
