@@ -31,9 +31,10 @@ const flaggedPkgStyle = {
 
 interface DependencyGraph {
   progress: number
+  onNodeClick: (nodeId: string) => void;
 }
 
-export function DependencyGraph({ progress }: DependencyGraph) {
+export function DependencyGraph({ progress, onNodeClick  }: DependencyGraph) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const socket = useContext(SocketContext);
@@ -118,14 +119,15 @@ export function DependencyGraph({ progress }: DependencyGraph) {
         </div>
       </div>
       <div className="flex-1" style={{ background: '#0a0a0a' }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          fitView
-          style={{ background: '#0a0a0a' }}
-        >
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={(_, node) => onNodeClick(node.id)}
+        fitView
+        style={{ background: '#0a0a0a' }}
+      >
           <Background color={'#22c55e'} gap={16} />
           <Controls />
         </ReactFlow>

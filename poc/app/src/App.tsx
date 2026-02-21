@@ -1,18 +1,33 @@
 import { useState, useEffect } from 'react';
 import { DependencyGraph } from './components/DependencyGraph';
 import { Terminal } from './components/Terminal';
-import Header from './components/Header';
-import SocketProvider from './providers/SocketProvider';
+import { VulnerabilityPanel } from './components/VulnerabilityPanel';
+import { RotateCcw } from 'lucide-react';
+import { 
+  ResizablePanelGroup, 
+  ResizablePanel, 
+  ResizableHandle 
+} from './components/ui/resizable';
 
 export default function App() {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [analysisKey, setAnalysisKey] = useState(0);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
   const restartAnalysis = () => {
     setProgress(0);
     setLogs([]);
     setAnalysisKey(prev => prev + 1);
+  };
+
+  const handleNodeClick = (nodeId: string) => {
+    console.log("Selected node set:", nodeId);
+    setSelectedNode(nodeId);
+  };
+
+  const handleClosePanel = () => {
+    setSelectedNode(null);
   };
 
   const analysisSteps = [
@@ -69,27 +84,123 @@ export default function App() {
   }, [analysisKey]);
 
   return (
-    <SocketProvider>
-      <div 
+    <div 
       className="h-screen flex flex-col"
       style={{ 
         background: '#0a0a0a',
         color: '#22c55e'
       }}
+    >
+      {/* Header */}
+      <header 
+        className="border-b px-4 md:px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3"
+        style={{ 
+          borderColor: '#374151',
+          background: '#111827'
+        }}
       >
-        <Header restartAnalysis={restartAnalysis} />
-        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-2 overflow-hidden">
-          <div 
-            className="h-1/2 lg:h-full border-b lg:border-b-0 lg:border-r"
-            style={{ borderColor: '#374151' }}
-          >
-            <DependencyGraph progress={progress} />
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: '#22c55e' }}>
+              <span className="text-lg" style={{ color: '#000' }}>S</span>
+            </div>
+            <h1 className="text-xl md:text-2xl" style={{ color: '#22c55e' }}>
+              HackEurope SPR
+            </h1>
           </div>
-          <div className="h-1/2 lg:h-full">
-            <Terminal logs={logs} />
-          </div>
+          <span className="text-xs md:text-sm px-2 py-1 rounded" style={{ 
+            background: '#374151',
+            color: '#9ca3af'
+          }}>
+            Supply Chain Package Registry
+          </span>
         </div>
+        <div className="flex gap-2 self-end md:self-auto">
+          <button
+            onClick={restartAnalysis}
+            className="p-2 rounded-lg transition-colors hover:bg-opacity-80"
+            style={{ 
+              background: '#374151',
+              color: '#22c55e'
+            }}
+            aria-label="Restart Analysis"
+          >
+            <RotateCcw className="w-5 h-5" />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Left: Dependency Graph */}
+          <ResizablePanel defaultSize={50} minSize={30}>
+            <div 
+              className="h-full border-r"
+              style={{ borderColor: '#374151' }}
+            >
+              <DependencyGraph progress={progress} onNodeClick={handleNodeClick} />
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle 
+            style={{ 
+              width: '2px',
+              background: '#374151',
+            }} 
+          />
+
+          {/* Right: Terminal / Vulnerability Panel (toggleable) */}
+          <ResizablePanel defaultSize={50} minSize={30}>
+            <div className="h-full flex flex-col">
+              {/* Tab Navigation */}
+              <div 
+                className="flex border-b"
+                style={{ 
+                  borderColor: '#374151',
+                  background: '#111827'
+                }}
+              >
+                <button
+                  onClick={() => setSelectedNode(null)}
+                  className="flex-1 px-4 py-3 text-sm transition-colors"
+                  style={{
+                    background: !selectedNode ? '#0a0a0a' : 'transparent',
+                    color: !selectedNode ? '#22c55e' : '#9ca3af',
+                    borderBottom: !selectedNode ? `2px solid #22c55e` : 'none',
+                  }}
+                >
+                  SPR Analysis Terminal
+                </button>
+                {selectedNode && (
+                  <button
+                    className="flex-1 px-4 py-3 text-sm transition-colors"
+                    style={{
+                      background: '#0a0a0a',
+                      color: '#22c55e',
+                      borderBottom: `2px solid #22c55e`,
+                    }}
+                  >
+                    Vulnerability Details
+                  </button>
+                )}
+              </div>
+
+              {/* Content Area */}
+              <div className="flex-1 overflow-hidden">
+                {!selectedNode ? (
+                  <Terminal logs={logs} />
+                ) : (
+                  <VulnerabilityPanel 
+                    selectedNode={selectedNode} 
+                    onClose={handleClosePanel} 
+                  />
+                )}
+              </div>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
-    </SocketProvider>
+    </div>
   );
 }
