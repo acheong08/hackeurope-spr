@@ -10,6 +10,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@art-ws/ssl-info": "^1.0.2",
     "nanoid": "^5.1.6",
     "yaml": "^2.8.2"
   }

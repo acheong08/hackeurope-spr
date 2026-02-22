@@ -41,7 +41,6 @@ Provide a thorough justification explaining your reasoning.`
 
 // Analyzer handles AI-powered security analysis of packages
 type Analyzer struct {
-	agent     fantasy.Agent
 	model     fantasy.LanguageModel
 	semaphore chan struct{} // Limits concurrent analysis
 }
@@ -53,7 +52,7 @@ func NewAnalyzer(apiKey string, concurrencyLimit int) (*Analyzer, error) {
 	}
 
 	provider, err := openai.New(
-		openai.WithBaseURL("http://dell.internal:8090/v1"),
+		openai.WithBaseURL("https://cope.duti.dev"),
 		openai.WithAPIKey(apiKey),
 	)
 	if err != nil {
@@ -66,10 +65,7 @@ func NewAnalyzer(apiKey string, concurrencyLimit int) (*Analyzer, error) {
 		return nil, fmt.Errorf("failed to create language model: %w", err)
 	}
 
-	agent := fantasy.NewAgent(model, fantasy.WithSystemPrompt(systemPrompt))
-
 	return &Analyzer{
-		agent:     agent,
 		model:     model,
 		semaphore: make(chan struct{}, concurrencyLimit),
 	}, nil
@@ -177,38 +173,42 @@ func (a *Analyzer) analyzePackage(ctx context.Context, pkg PackageInfo) error {
 	// Format diff data for the prompt
 	prompt := formatAnalysisPrompt(pkg.Name, pkg.Version, &deduped)
 
+	report := SecurityAssessment{}
+	// Tool
+	submitReportTool := fantasy.NewAgentTool(
+		"submit_assessment",
+		"Submit your security assessment for this package", func(
+			_ context.Context,
+			input SecurityAssessment,
+			_ fantasy.ToolCall,
+		) (fantasy.ToolResponse, error) {
+			report = input
+			return fantasy.ToolResponse{
+				Content: "Command received",
+			}, nil
+		})
+
 	// Call the agent
-	result, err := a.agent.Generate(ctx, fantasy.AgentCall{
-		Prompt:      prompt,
-		ActiveTools: []string{"submit_assessment"},
+	agent := fantasy.NewAgent(a.model, fantasy.WithSystemPrompt(systemPrompt), fantasy.WithTools(submitReportTool))
+	result, err := agent.Generate(ctx, fantasy.AgentCall{
+		Prompt: prompt,
 	})
 	if err != nil {
 		return fmt.Errorf("agent generation failed: %w", err)
 	}
 
-	// Extract assessment from tool calls
-	assessment, err := extractAssessment(result)
-	if err != nil {
-		return fmt.Errorf("failed to extract assessment: %w", err)
-	}
+	log.Printf("  [AI] Agent response for %s@%s:\n%s", pkg.Name, pkg.Version,
+		result.Response.Content.Text())
 
 	// Save the analysis
-	if err := a.saveAnalysis(pkg.OutputDir, assessment); err != nil {
+	if err := a.saveAnalysis(pkg.OutputDir, report); err != nil {
 		return fmt.Errorf("failed to save analysis: %w", err)
 	}
 
 	log.Printf("  [AI] Completed analysis for %s@%s - Malicious: %v (confidence: %.2f)",
-		pkg.Name, pkg.Version, assessment.IsMalicious, assessment.Confidence)
+		pkg.Name, pkg.Version, report.IsMalicious, report.Confidence)
 
 	return nil
-}
-
-// AssessmentInput represents the tool input schema
-type AssessmentInput struct {
-	IsMalicious   bool     `json:"is_malicious"`
-	Confidence    float64  `json:"confidence"`
-	Justification string   `json:"justification"`
-	Indicators    []string `json:"indicators,omitempty"`
 }
 
 // formatAnalysisPrompt creates a detailed prompt from the deduped stats
@@ -263,32 +263,6 @@ func formatAnalysisPrompt(name, version string, stats *aggregate.DedupedProcessS
 	sb.WriteString("\n\nUse the submit_assessment tool to provide your security assessment.")
 
 	return sb.String()
-}
-
-// extractAssessment extracts the SecurityAssessment from agent result
-func extractAssessment(result *fantasy.AgentResult) (SecurityAssessment, error) {
-	// Look for tool call with assessment
-	for _, step := range result.Steps {
-		for _, content := range step.Response.Content {
-			if toolCall, ok := content.(fantasy.ToolCallContent); ok {
-				if toolCall.ToolName == "submit_assessment" {
-					var input AssessmentInput
-					if err := json.Unmarshal([]byte(toolCall.Input), &input); err != nil {
-						return SecurityAssessment{}, fmt.Errorf("failed to parse assessment: %w", err)
-					}
-
-					return SecurityAssessment{
-						IsMalicious:   input.IsMalicious,
-						Confidence:    input.Confidence,
-						Justification: input.Justification,
-						Indicators:    input.Indicators,
-					}, nil
-				}
-			}
-		}
-	}
-
-	return SecurityAssessment{}, fmt.Errorf("no assessment tool call found in response")
 }
 
 // saveAnalysis saves the assessment to ai-analysis.json
