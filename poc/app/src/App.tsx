@@ -132,7 +132,6 @@ export default function App() {
                     id: `${pkg.id}-${dependentNode.id}`,
                     source: pkg.id,
                     target: dependentNode.id,
-                    type: 'straight', // Force straight lines
                     animated: true,   // Enable the flow animation
                     markerEnd: { 
                       type: MarkerType.ArrowClosed,
