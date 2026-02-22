@@ -17,7 +17,7 @@ func TestParseLockfile(t *testing.T) {
 		Version: "0.0.1",
 	}
 
-	graph, err := lm.ParseLockfile("../../../poc/demo-package/package-lock.json", rootPackage)
+	graph, err := lm.ParseLockfile("../../../poc/small-test/package-lock.json", rootPackage)
 	require.NoError(t, err)
 	require.NotNil(t, graph)
 

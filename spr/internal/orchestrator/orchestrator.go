@@ -159,7 +159,52 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 		Package: pkg,
 	}
 
-	// 1. Trigger workflow
+	// 1. Check for cached behavior.jsonl file
+	normalizedPkgName := tester.NormalizePackageName(pkg.Name)
+	cacheDir := filepath.Join("analysis-results", fmt.Sprintf("%s@%s", normalizedPkgName, pkg.Version))
+	cachedBehaviorPath := filepath.Join(cacheDir, "behavior.jsonl")
+
+	if _, err := os.Stat(cachedBehaviorPath); err == nil {
+		// Cached file exists, use it instead of running workflow
+		fmt.Printf("    [Worker] Using cached behavior.jsonl for %s@%s\n", pkg.Name, pkg.Version)
+
+		// Copy cached file to tempDir for processing
+		artifactDir := filepath.Join(tempDir, fmt.Sprintf("%s@%s", normalizedPkgName, pkg.Version))
+		if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+			result.Error = fmt.Errorf("failed to create artifact directory: %w", err)
+			return result
+		}
+
+		// Copy behavior.jsonl to artifact directory
+		data, err := os.ReadFile(cachedBehaviorPath)
+		if err != nil {
+			result.Error = fmt.Errorf("failed to read cached behavior.jsonl: %w", err)
+			return result
+		}
+
+		destPath := filepath.Join(artifactDir, "behavior.jsonl")
+		if err := os.WriteFile(destPath, data, 0o644); err != nil {
+			result.Error = fmt.Errorf("failed to write cached behavior.jsonl: %w", err)
+			return result
+		}
+
+		// Also copy diff.json if it exists
+		cachedDiffPath := filepath.Join(cacheDir, "diff.json")
+		if diffData, err := os.ReadFile(cachedDiffPath); err == nil {
+			diffDestPath := filepath.Join(artifactDir, "diff.json")
+			if err := os.WriteFile(diffDestPath, diffData, 0o644); err != nil {
+				log.Printf("    [Worker] Warning: failed to copy cached diff.json: %v\n", err)
+			}
+		}
+
+		artifacts := []string{artifactDir}
+
+		result.Success = true
+		result.Artifacts = artifacts
+		return result
+	}
+
+	// 2. Trigger workflow (no cache found)
 	inputs := map[string]string{
 		"package": pkg.Name,
 		"version": pkg.Version,
@@ -174,20 +219,20 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 	result.RunID = triggerResp.RunID
 	fmt.Printf("    [Worker] Triggered workflow for %s@%s (run ID: %d)\n", pkg.Name, pkg.Version, triggerResp.RunID)
 
-	// 2. Poll for completion
+	// 3. Poll for completion
 	run, err := o.pollWorkflowCompletion(ctx, triggerResp.RunID)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to wait for completion: %w", err)
 		return result
 	}
 
-	// 3. Check conclusion
+	// 4. Check conclusion
 	if run.Conclusion != "success" {
 		result.Error = fmt.Errorf("workflow failed with conclusion: %s", run.Conclusion)
 		return result
 	}
 
-	// 4. Download artifacts
+	// 5. Download artifacts
 	artifacts, err := o.downloadArtifacts(ctx, run.ID, pkg, tempDir)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to download artifacts: %w", err)
