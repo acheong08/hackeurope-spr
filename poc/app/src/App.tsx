@@ -1,8 +1,8 @@
 import { useState, useEffect, useContext, useCallback } from "react";
 import { DependencyGraph } from "./components/DependencyGraph";
 import { Terminal } from "./components/Terminal";
-import { Analysis } from "./components/Analysis";
-import { Data } from "./components/Data";
+import { DataTab } from "./components/DataTab";
+import { AnalysisTab } from "./components/AnalysisTab";
 import Header from "./components/Header";
 import { SocketContext } from "./providers/SocketProvider";
 import {
@@ -248,12 +248,7 @@ export default function App() {
   };
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    if (selectedNode == node.id) {
-      setSelectedNode(null);
-      setSelectedTab(Tab.LOGS);
-    } else {
-      setSelectedNode(node.id);
-    }
+    setSelectedNode(node.id);
 
     setExpandedNodeIds((prev) => {
       const next = new Set(prev);
@@ -367,26 +362,6 @@ export default function App() {
                   <>
                     <button
                       className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
-                      onClick={() => handleSetPanel(Tab.DATA)}
-                      style={{
-                        background:
-                          selectedTab == Tab.DATA
-                            ? "#0a0a0a"
-                            : "transparent",
-                        color:
-                          selectedTab == Tab.DATA
-                            ? "#22c55e"
-                            : "#9ca3af",
-                        borderBottom:
-                          selectedTab == Tab.DATA
-                            ? `2px solid #22c55e`
-                            : "none",
-                      }}
-                    >
-                      Data
-                    </button>
-                    <button
-                      className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
                       onClick={() => handleSetPanel(Tab.ANALYSIS)}
                       style={{
                         background:
@@ -403,6 +378,26 @@ export default function App() {
                             : "none",
                       }}
                     >
+                      Data
+                    </button>
+                    <button
+                      className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
+                      onClick={() => handleSetPanel(Tab.DATA)}
+                      style={{
+                        background:
+                          selectedTab == Tab.DATA
+                            ? "#0a0a0a"
+                            : "transparent",
+                        color:
+                          selectedTab == Tab.DATA
+                            ? "#22c55e"
+                            : "#9ca3af",
+                        borderBottom:
+                          selectedTab == Tab.DATA
+                            ? `2px solid #22c55e`
+                            : "none",
+                      }}
+                    >
                       Analysis
                     </button>
                   </>
@@ -411,9 +406,9 @@ export default function App() {
               {selectedTab == Tab.LOGS ? (
                 <Terminal logs={logs} />
               ) : selectedTab == Tab.ANALYSIS ? (
-                <Analysis selectedNode={selectedNode} />
+                <DataTab selectedNode={selectedNode} />
               ) : 
-                <Data selectedNode={selectedNode} />}
+                <AnalysisTab selectedNode={selectedNode} />}
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
