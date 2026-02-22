@@ -20,10 +20,15 @@ type Config struct {
 	// Server
 	Port string
 
-	// Registry
+	// Unsafe (staging) registry
 	RegistryURL   string
 	RegistryToken string
 	RegistryOwner string
+
+	// Safe (approved) registry — promotion only happens when token is set
+	SafeRegistryURL   string
+	SafeRegistryToken string
+	SafeRegistryOwner string
 
 	// GitHub
 	GitHubToken string
@@ -45,16 +50,19 @@ func loadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
 	config := &Config{
-		Port:          getEnv("PORT", "8080"),
-		RegistryURL:   getEnv("REGISTRY_URL", "https://git.duti.dev"),
-		RegistryToken: getEnv("REGISTRY_TOKEN", ""),
-		RegistryOwner: getEnv("REGISTRY_OWNER", "acheong08"),
-		GitHubToken:   getEnv("GITHUB_TOKEN", ""),
-		RepoOwner:     getEnv("REPO_OWNER", "acheong08"),
-		RepoName:      getEnv("REPO_NAME", "hackeurope-spr"),
-		MongoURI:      getEnv("MONGO_URI", "mongodb://localhost:27017"),
-		BaselinePath:  getEnv("BASELINE_PATH", "safe-sample.json"),
-		OpenAIAPIKey:  getEnv("OPENAI_API_KEY", ""),
+		Port:              getEnv("PORT", "8080"),
+		RegistryURL:       getEnv("REGISTRY_URL", "https://git.duti.dev"),
+		RegistryToken:     getEnv("REGISTRY_TOKEN", ""),
+		RegistryOwner:     getEnv("REGISTRY_OWNER", "acheong08"),
+		SafeRegistryURL:   getEnv("SAFE_REGISTRY_URL", "https://git.duti.dev"),
+		SafeRegistryToken: getEnv("SAFE_REGISTRY_TOKEN", ""),
+		SafeRegistryOwner: getEnv("SAFE_REGISTRY_OWNER", "secure"),
+		GitHubToken:       getEnv("GITHUB_TOKEN", ""),
+		RepoOwner:         getEnv("REPO_OWNER", "acheong08"),
+		RepoName:          getEnv("REPO_NAME", "hackeurope-spr"),
+		MongoURI:          getEnv("MONGO_URI", "mongodb://localhost:27017"),
+		BaselinePath:      getEnv("BASELINE_PATH", "safe-sample.json"),
+		OpenAIAPIKey:      getEnv("OPENAI_API_KEY", ""),
 	}
 
 	// Validate required fields
@@ -205,7 +213,8 @@ func (c *Client) handleAnalyze(msg server.Message) {
 
 	// Run analysis pipeline
 	pipeline := server.NewPipeline(c.config.RegistryURL, c.config.RegistryToken, c.config.RegistryOwner,
-		c.config.GitHubToken, c.config.RepoOwner, c.config.RepoName, c, c.config.BaselinePath, c.config.OpenAIAPIKey)
+		c.config.GitHubToken, c.config.RepoOwner, c.config.RepoName, c, c.config.BaselinePath, c.config.OpenAIAPIKey,
+		c.config.SafeRegistryURL, c.config.SafeRegistryToken, c.config.SafeRegistryOwner)
 
 	if err := pipeline.Run(c.analysisCtx, payload.PackageJSON); err != nil {
 		if c.analysisCtx.Err() == context.Canceled {

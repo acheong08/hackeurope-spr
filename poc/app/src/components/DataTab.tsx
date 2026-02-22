@@ -1,7 +1,6 @@
 import { Shield, HardDrive, Network, Terminal, Activity } from 'lucide-react';
-import { useState } from 'react';
 
-type Data = {
+export type BehavioralData = {
   collection: string;
   per_process: Record<string, {
     syscall_profile: Record<string, number>;
@@ -9,8 +8,8 @@ type Data = {
     executed_commands: Record<string, number>;
     network_activity: {
       ips: Record<string, number>;
-      dns_records: Record<string, number>
-    }
+      dns_records: Record<string, number>;
+    };
   }>;
   count_processes: number;
   baseline_source: string;
@@ -20,63 +19,16 @@ type Data = {
   removed_syscalls: number;
 };
 
-interface AnalysisProps {
+interface DataTabProps {
   selectedNode: string | null;
+  data: BehavioralData | null;
 }
 
-export const DataTab = ({ selectedNode }: AnalysisProps) => {
-  const [data, setData] = useState<Data>({
-    collection: "art-ws__ssl-info@1.0.2",
-    per_process: {
-      curl: {
-        syscall_profile: {
-          connect: 15,
-          net_packet_dns_request: 4,
-          openat: 47
-        },
-        file_access: {
-          "/etc/gai.conf": 1,
-          "/etc/host.conf": 1,
-          "/etc/hosts": 2
-        },
-        executed_commands: {
-          "/usr/bin/gzip": 1,
-          "/usr/local/bin/gzip": 2,
-          "/usr/local/sbin/gzip": 2,
-          "/usr/sbin/gzip": 2
-        },
-        network_activity: {
-          ips: {
-            "127.0.0.53:53": 8,
-            "140.82.116.4:443": 1,
-            "142.251.32.51:443": 2,
-            "142.251.32.51:53": 2,
-            "185.199.108.133:443": 1,
-            "185.199.108.133:53": 1,
-            "185.199.109.133:53": 1,
-            "185.199.110.133:53": 1,
-            "185.199.111.133:53": 1
-          },
-          dns_records: {
-            "github.com": 2,
-            "oss.trufflehog.org": 4,
-            "release-assets.githubusercontent.com": 2
-          }
-        }
-      }
-    },
-    count_processes: 9,
-    baseline_source: "default",
-    removed_processes: 2,
-    removed_files: 54,
-    removed_commands: 6,
-    removed_syscalls: 10
-  });
-  
+export const DataTab = ({ selectedNode, data }: DataTabProps) => {
   const renderRecordList = (records: Record<string, number>, color = "#4ade80") => {
     const entries = Object.entries(records);
     if (entries.length === 0) return <div className="text-gray-500 italic">None detected</div>;
-    
+
     return entries.map(([key, count], idx) => (
       <div key={idx} className="flex justify-between items-center gap-2">
         <span className="truncate" style={{ color }}>{key}</span>
@@ -85,8 +37,20 @@ export const DataTab = ({ selectedNode }: AnalysisProps) => {
     ));
   };
 
+  if (!selectedNode) {
+    return (
+      <div className="h-full flex items-center justify-center" style={{ background: "#0a0a0a" }}>
+        <p className="text-gray-500 text-sm">Select a package node to view behavioral data</p>
+      </div>
+    );
+  }
+
   if (!data) {
-    return <></>
+    return (
+      <div className="h-full flex items-center justify-center" style={{ background: "#0a0a0a" }}>
+        <p className="text-gray-500 text-sm">No behavioral data available for this package</p>
+      </div>
+    );
   }
 
   return (

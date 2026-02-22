@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/acheong08/hackeurope-spr/internal/aggregate"
+	"github.com/acheong08/hackeurope-spr/internal/analysis"
 	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
@@ -16,12 +18,14 @@ const (
 	TypePing    MessageType = "ping"    // Keep-alive
 
 	// Server -> Client
-	TypeDAG           MessageType = "dag"            // Dependency graph data
-	TypeProgress      MessageType = "progress"       // Progress updates
-	TypeLog           MessageType = "log"            // Log messages for terminal
-	TypePackageStatus MessageType = "package_status" // Individual package status update
-	TypeComplete      MessageType = "complete"       // Analysis complete
-	TypeError         MessageType = "error"          // Error message
+	TypeDAG                   MessageType = "dag"                     // Dependency graph data
+	TypeProgress              MessageType = "progress"                // Progress updates
+	TypeLog                   MessageType = "log"                     // Log messages for terminal
+	TypePackageStatus         MessageType = "package_status"          // Individual package status update
+	TypePackageBehavioralData MessageType = "package_behavioral_data" // Per-package deduped diff data
+	TypePackageAnalysis       MessageType = "package_analysis"        // Per-package AI security assessment
+	TypeComplete              MessageType = "complete"                // Analysis complete
+	TypeError                 MessageType = "error"                   // Error message
 )
 
 // Message is the base WebSocket message structure
@@ -145,4 +149,42 @@ func ParseAnalyzePayload(msg Message) (*AnalyzePayload, error) {
 		return nil, fmt.Errorf("failed to parse analyze payload: %w", err)
 	}
 	return &payload, nil
+}
+
+// PackageBehavioralDataPayload contains the deduped behavioral diff for a package
+type PackageBehavioralDataPayload struct {
+	PackageID string                         `json:"package_id"`
+	Name      string                         `json:"name"`
+	Version   string                         `json:"version"`
+	Data      *aggregate.DedupedProcessStats `json:"data"`
+}
+
+// PackageAnalysisPayload contains the AI security assessment for a package
+type PackageAnalysisPayload struct {
+	PackageID  string                       `json:"package_id"`
+	Name       string                       `json:"name"`
+	Version    string                       `json:"version"`
+	Assessment *analysis.SecurityAssessment `json:"assessment"`
+}
+
+func NewPackageBehavioralDataMessage(pkgID, name, version string, data *aggregate.DedupedProcessStats) Message {
+	payload := PackageBehavioralDataPayload{
+		PackageID: pkgID,
+		Name:      name,
+		Version:   version,
+		Data:      data,
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	return Message{Type: TypePackageBehavioralData, Payload: payloadBytes}
+}
+
+func NewPackageAnalysisMessage(pkgID, name, version string, assessment *analysis.SecurityAssessment) Message {
+	payload := PackageAnalysisPayload{
+		PackageID:  pkgID,
+		Name:       name,
+		Version:    version,
+		Assessment: assessment,
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	return Message{Type: TypePackageAnalysis, Payload: payloadBytes}
 }

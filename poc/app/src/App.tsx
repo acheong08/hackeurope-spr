@@ -1,8 +1,8 @@
 import { useState, useEffect, useContext, useCallback } from "react";
 import { DependencyGraph } from "./components/DependencyGraph";
 import { Terminal } from "./components/Terminal";
-import { DataTab } from "./components/DataTab";
-import { AnalysisTab } from "./components/AnalysisTab";
+import { DataTab, type BehavioralData } from "./components/DataTab";
+import { AnalysisTab, type SecurityAssessment } from "./components/AnalysisTab";
 import Header from "./components/Header";
 import { SocketContext } from "./providers/SocketProvider";
 import {
@@ -21,8 +21,8 @@ import { getLayoutedElements } from "./utils/getLayoutedElements";
 
 enum Tab {
   LOGS,
-  DATA,
-  ANALYSIS
+  BEHAVIORAL_DATA,
+  AI_ANALYSIS,
 }
 
 const safePkgStyle = {
@@ -72,6 +72,10 @@ export default function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
+  // Per-package data maps keyed by package_id ("name@version")
+  const [behavioralDataMap, setBehavioralDataMap] = useState<Record<string, BehavioralData>>({});
+  const [analysisMap, setAnalysisMap] = useState<Record<string, SecurityAssessment>>({});
+
   const { send, subscribe, isConnected } = useContext(SocketContext);
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
 
@@ -86,7 +90,7 @@ export default function App() {
             nodes: PackageNode[];
             edge_count: number;
           };
-          
+
           // Find root node and extract direct dependencies
           const rootNode = payload.nodes.find(n => n.id === payload.root_package.id);
           const directDeps = new Set<string>();
@@ -98,7 +102,7 @@ export default function App() {
               }
             });
           }
-          
+
           // Build nodes from DAG
           const newNodes: Node[] = payload.nodes.map((pkg) => ({
             id: pkg.id,
@@ -110,27 +114,24 @@ export default function App() {
 
           // Build edges from dependencies
           const newEdges: Edge[] = [];
-          
+
           payload.nodes.forEach((pkg) => {
-            // Check if this package is a direct dependency of root
             if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
-              // This is likely the root or has deps
               Object.entries(pkg.dependencies).forEach(([depName]) => {
-                // Find the dependent node
                 const dependentNode = payload.nodes.find(n => n.name === depName);
                 if (dependentNode) {
                   newEdges.push({
                     id: `${pkg.id}-${dependentNode.id}`,
                     source: pkg.id,
                     target: dependentNode.id,
-                    animated: true,   // Enable the flow animation
-                    markerEnd: { 
+                    animated: true,
+                    markerEnd: {
                       type: MarkerType.ArrowClosed,
-                      color: "#22c55e", // Matches your "Safe" green theme
+                      color: "#22c55e",
                     },
-                    style: { 
-                      stroke: "#22c55e", 
-                      strokeWidth: 2 
+                    style: {
+                      stroke: "#22c55e",
+                      strokeWidth: 2,
                     },
                   });
                 }
@@ -141,17 +142,17 @@ export default function App() {
           const layoutedNodes = getLayoutedElements(newNodes, newEdges);
           setNodes(layoutedNodes);
           setEdges(newEdges);
-          
+
           addLog(`✓ DAG received: ${payload.nodes.length} packages, ${newEdges.length} dependencies`);
           break;
         }
-        
+
         case "progress": {
           const payload = msg.payload as { percent: number; stage: string; message: string };
           setProgress(payload.percent);
           break;
         }
-        
+
         case "package_status": {
           const payload = msg.payload as { package_id: string; name: string; version: string; status: string };
           setNodes((curNodes) =>
@@ -169,13 +170,34 @@ export default function App() {
             })
           );
 
-          // Log status change
-          const statusIcon = payload.status === "complete" ? "✓" : 
+          const statusIcon = payload.status === "complete" ? "✓" :
                             payload.status === "failed" ? "✗" : "→";
           addLog(`${statusIcon} ${payload.name}@${payload.version}: ${payload.status}`);
           break;
         }
-        
+
+        case "package_behavioral_data": {
+          const payload = msg.payload as {
+            package_id: string;
+            name: string;
+            version: string;
+            data: BehavioralData;
+          };
+          setBehavioralDataMap((prev) => ({ ...prev, [payload.package_id]: payload.data }));
+          break;
+        }
+
+        case "package_analysis": {
+          const payload = msg.payload as {
+            package_id: string;
+            name: string;
+            version: string;
+            assessment: SecurityAssessment;
+          };
+          setAnalysisMap((prev) => ({ ...prev, [payload.package_id]: payload.assessment }));
+          break;
+        }
+
         case "complete": {
           const payload = msg.payload as { success: boolean; message: string };
           if (payload.success) {
@@ -186,19 +208,19 @@ export default function App() {
           setIsAnalyzing(false);
           break;
         }
-        
+
         case "error": {
           const payload = msg.payload as { message: string };
           addLog(`✗ Error: ${payload.message}`);
           setIsAnalyzing(false);
           break;
         }
-        
+
         case "log": {
           const payload = msg.payload as { message: string; level?: string };
-          const prefix = payload.level === "success" ? "✓ " : 
-                         payload.level === "warning" ? "⚠ " : 
-                         payload.level === "error" ? "✗ " : 
+          const prefix = payload.level === "success" ? "✓ " :
+                         payload.level === "warning" ? "⚠ " :
+                         payload.level === "error" ? "✗ " :
                          payload.level === "info" ? "→ " : "";
           addLog(`${prefix}${payload.message}`);
           break;
@@ -215,12 +237,12 @@ export default function App() {
       addLog("⚠ Analysis already in progress");
       return;
     }
-    
+
     if (!packageContent) {
       addLog("⚠ Please upload a package.json file first");
       return;
     }
-    
+
     if (!isConnected) {
       addLog("⚠ WebSocket not connected");
       return;
@@ -232,8 +254,9 @@ export default function App() {
     setSelectedTab(Tab.LOGS);
     setNodes([]);
     setEdges([]);
+    setBehavioralDataMap({});
+    setAnalysisMap({});
 
-    // Send analyze request
     addLog("→ Starting analysis...");
     send({
       type: "analyze",
@@ -362,53 +385,60 @@ export default function App() {
                   <>
                     <button
                       className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
-                      onClick={() => handleSetPanel(Tab.ANALYSIS)}
+                      onClick={() => handleSetPanel(Tab.BEHAVIORAL_DATA)}
                       style={{
                         background:
-                          selectedTab == Tab.ANALYSIS
+                          selectedTab == Tab.BEHAVIORAL_DATA
                             ? "#0a0a0a"
                             : "transparent",
                         color:
-                          selectedTab == Tab.ANALYSIS
+                          selectedTab == Tab.BEHAVIORAL_DATA
                             ? "#22c55e"
                             : "#9ca3af",
                         borderBottom:
-                          selectedTab == Tab.ANALYSIS
+                          selectedTab == Tab.BEHAVIORAL_DATA
                             ? `2px solid #22c55e`
                             : "none",
                       }}
                     >
-                      Data
+                      Behavioral Data
                     </button>
                     <button
                       className="flex-1 px-4 py-3 text-sm transition-colors cursor-pointer"
-                      onClick={() => handleSetPanel(Tab.DATA)}
+                      onClick={() => handleSetPanel(Tab.AI_ANALYSIS)}
                       style={{
                         background:
-                          selectedTab == Tab.DATA
+                          selectedTab == Tab.AI_ANALYSIS
                             ? "#0a0a0a"
                             : "transparent",
                         color:
-                          selectedTab == Tab.DATA
+                          selectedTab == Tab.AI_ANALYSIS
                             ? "#22c55e"
                             : "#9ca3af",
                         borderBottom:
-                          selectedTab == Tab.DATA
+                          selectedTab == Tab.AI_ANALYSIS
                             ? `2px solid #22c55e`
                             : "none",
                       }}
                     >
-                      Analysis
+                      AI Analysis
                     </button>
                   </>
                 )}
               </div>
               {selectedTab == Tab.LOGS ? (
                 <Terminal logs={logs} />
-              ) : selectedTab == Tab.ANALYSIS ? (
-                <DataTab selectedNode={selectedNode} />
-              ) : 
-                <AnalysisTab selectedNode={selectedNode} />}
+              ) : selectedTab == Tab.BEHAVIORAL_DATA ? (
+                <DataTab
+                  selectedNode={selectedNode}
+                  data={selectedNode ? (behavioralDataMap[selectedNode] ?? null) : null}
+                />
+              ) : (
+                <AnalysisTab
+                  selectedNode={selectedNode}
+                  assessment={selectedNode ? (analysisMap[selectedNode] ?? null) : null}
+                />
+              )}
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

@@ -9,9 +9,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/acheong08/hackeurope-spr/internal/aggregate"
+	"github.com/acheong08/hackeurope-spr/internal/analysis"
 	"github.com/acheong08/hackeurope-spr/internal/orchestrator"
 	"github.com/acheong08/hackeurope-spr/internal/parser"
 	"github.com/acheong08/hackeurope-spr/internal/registry"
+	"github.com/acheong08/hackeurope-spr/internal/tester"
 	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
@@ -25,10 +28,15 @@ type ProgressSender interface {
 
 // Pipeline wraps the CLI analysis logic for WebSocket use
 type Pipeline struct {
-	// Registry settings
+	// Unsafe (staging) registry settings
 	registryURL   string
 	registryToken string
 	registryOwner string
+
+	// Safe (approved) registry settings — promotion skipped when token is empty
+	safeRegistryURL   string
+	safeRegistryToken string
+	safeRegistryOwner string
 
 	// GitHub settings
 	githubToken string
@@ -47,17 +55,27 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new pipeline instance
-func NewPipeline(registryURL, registryToken, registryOwner, githubToken, repoOwner, repoName string, sender ProgressSender, baselinePath string, apiKey string) *Pipeline {
+func NewPipeline(
+	registryURL, registryToken, registryOwner,
+	githubToken, repoOwner, repoName string,
+	sender ProgressSender,
+	baselinePath string,
+	apiKey string,
+	safeRegistryURL, safeRegistryToken, safeRegistryOwner string,
+) *Pipeline {
 	return &Pipeline{
-		registryURL:   registryURL,
-		registryToken: registryToken,
-		registryOwner: registryOwner,
-		githubToken:   githubToken,
-		repoOwner:     repoOwner,
-		repoName:      repoName,
-		baselinePath:  baselinePath,
-		apiKey:        apiKey,
-		sender:        sender,
+		registryURL:       registryURL,
+		registryToken:     registryToken,
+		registryOwner:     registryOwner,
+		safeRegistryURL:   safeRegistryURL,
+		safeRegistryToken: safeRegistryToken,
+		safeRegistryOwner: safeRegistryOwner,
+		githubToken:       githubToken,
+		repoOwner:         repoOwner,
+		repoName:          repoName,
+		baselinePath:      baselinePath,
+		apiKey:            apiKey,
+		sender:            sender,
 	}
 }
 
@@ -123,9 +141,14 @@ func (p *Pipeline) Run(ctx context.Context, packageJSONContent string) error {
 	p.sender.SendProgress(40, "upload", "Packages uploaded successfully")
 
 	// Step 3: Run behavioral analysis workflows (40% - 80%)
+	outputDir := filepath.Join(tempDir, "artifacts")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
 	if len(directDeps) > 0 {
 		p.sender.SendProgress(40, "workflow", fmt.Sprintf("Starting analysis of %d packages...", len(directDeps)))
-		if err := p.runWorkflows(ctx, directDeps); err != nil {
+		if err := p.runWorkflows(ctx, directDeps, graph, outputDir); err != nil {
 			return fmt.Errorf("workflow analysis failed: %w", err)
 		}
 		p.sender.SendProgress(80, "workflow", "Behavioral analysis complete")
@@ -255,8 +278,10 @@ func (p *Pipeline) uploadPackages(ctx context.Context, graph *models.DependencyG
 	}
 }
 
-// runWorkflows triggers GitHub Actions workflows for packages
-func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageNode) error {
+// runWorkflows triggers GitHub Actions workflows for packages, then emits
+// behavioral data and AI analysis results over WebSocket, and promotes to
+// the safe registry if all packages pass.
+func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageNode, graph *models.DependencyGraph, outputDir string) error {
 	// Convert to []models.Package
 	pkgs := make([]models.Package, len(packages))
 	for i, node := range packages {
@@ -267,19 +292,13 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 		}
 	}
 
-	// Create temp directories
-	tempDir, err := os.MkdirTemp("", "spr-workflow-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	outputDir := filepath.Join(tempDir, "artifacts")
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+	// Build safe registry uploader (nil when token is absent)
+	var safeUploader *registry.Uploader
+	if p.safeRegistryToken != "" {
+		safeUploader = registry.NewUploader(p.safeRegistryURL, p.safeRegistryOwner, p.safeRegistryToken)
 	}
 
-	// Create orchestrator with progress callback for artifact notifications
+	// Create orchestrator
 	orch := orchestrator.NewOrchestrator(
 		p.githubToken,
 		p.repoOwner,
@@ -288,21 +307,20 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 		5,             // concurrency
 		5*time.Minute, // timeout
 		func(pkgName, pkgVersion string, artifactCount int) {
-			// Send artifact success to WebSocket client
 			p.sender.SendLog(fmt.Sprintf("Downloaded %d artifacts for %s@%s", artifactCount, pkgName, pkgVersion), "success")
 		},
 		p.baselinePath,
 		p.apiKey,
-		nil, // safe registry promotion not wired up in server yet
-		nil, // dependency graph not passed here yet
+		safeUploader,
+		graph,
 	)
 
-	// Send status updates for each package
+	// Mark all packages pending
 	for _, pkg := range packages {
 		p.sender.SendMessage(NewPackageStatusMessage(pkg.ID, pkg.Name, pkg.Version, "pending", 0))
 	}
 
-	// Create progress callback
+	// Create progress goroutine
 	completedChan := make(chan int, len(pkgs))
 	go func() {
 		completed := 0
@@ -317,23 +335,66 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 	}()
 
 	// Run workflows
-	// Note: The orchestrator doesn't have progress callbacks yet, so we just run it
-	// In a future version, we'd modify the orchestrator to send progress updates
-	_, err = orch.RunPackages(ctx, pkgs, tempDir, outputDir)
+	_, err := orch.RunPackages(ctx, pkgs, p.tempDir, outputDir)
 
-	// Signal completion
 	close(completedChan)
 
 	if err != nil {
 		return err
 	}
 
-	// Mark all packages as complete
-	for _, pkg := range packages {
-		p.sender.SendMessage(NewPackageStatusMessage(pkg.ID, pkg.Name, pkg.Version, "complete", 100))
-	}
+	// After orchestrator finishes, send per-package results and set node colors
+	p.emitPackageResults(packages, outputDir)
 
 	return nil
+}
+
+// emitPackageResults reads diff.json and ai-analysis.json for each package
+// and sends them over WebSocket. Sets package_status to "failed" for malicious packages.
+func (p *Pipeline) emitPackageResults(packages []*models.PackageNode, outputDir string) {
+	for _, pkg := range packages {
+		normalizedName := tester.NormalizePackageName(pkg.Name)
+		pkgDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", normalizedName, pkg.Version))
+
+		isMalicious := false
+
+		// --- Behavioral diff (diff.json) ---
+		diffPath := filepath.Join(pkgDir, "diff.json")
+		if data, err := os.ReadFile(diffPath); err == nil {
+			var diff aggregate.DedupedProcessStats
+			if err := json.Unmarshal(data, &diff); err == nil {
+				p.sender.SendMessage(NewPackageBehavioralDataMessage(pkg.ID, pkg.Name, pkg.Version, &diff))
+			} else {
+				p.log(fmt.Sprintf("Failed to parse diff.json for %s@%s: %v", pkg.Name, pkg.Version, err), "warning")
+			}
+		}
+		// diff.json absence is normal (no anomalies) — no warning needed
+
+		// --- AI analysis (ai-analysis.json) ---
+		aiPath := filepath.Join(pkgDir, "ai-analysis.json")
+		if data, err := os.ReadFile(aiPath); err == nil {
+			var assessment analysis.SecurityAssessment
+			if err := json.Unmarshal(data, &assessment); err == nil {
+				p.sender.SendMessage(NewPackageAnalysisMessage(pkg.ID, pkg.Name, pkg.Version, &assessment))
+				if assessment.IsMalicious {
+					isMalicious = true
+					p.log(fmt.Sprintf("SUSPICIOUS %s@%s — %s", pkg.Name, pkg.Version, assessment.Justification), "warning")
+				} else {
+					p.log(fmt.Sprintf("SAFE %s@%s (confidence=%.0f%%)", pkg.Name, pkg.Version, assessment.Confidence*100), "success")
+				}
+			} else {
+				p.log(fmt.Sprintf("Failed to parse ai-analysis.json for %s@%s: %v", pkg.Name, pkg.Version, err), "warning")
+			}
+		}
+		// ai-analysis.json absence means no anomalies → safe
+
+		// Set node color in the DAG
+		status := "complete"
+		if isMalicious {
+			status = "failed"
+		}
+		p.sender.SendMessage(NewPackageStatusMessage(pkg.ID, pkg.Name, pkg.Version, status, 100))
+	}
 }
 
 // parsePackageJSON is a helper to parse package.json from string
