@@ -707,11 +707,13 @@ func (o *Orchestrator) promoteToSafeRegistry(ctx context.Context, packages []mod
 	}
 
 	if len(blocked) > 0 {
-		log.Printf("Promotion ABORTED — %d package(s) flagged as malicious:", len(blocked))
+		log.Printf("Promotion skipped — %d package(s) flagged as malicious:", len(blocked))
 		for _, b := range blocked {
 			log.Printf("  - %s", b)
 		}
-		return fmt.Errorf("promotion aborted: %d malicious package(s) detected: %v", len(blocked), blocked)
+		// Don't return an error — let the caller continue so it can
+		// emit results (e.g. red nodes in the frontend).
+		return nil
 	}
 
 	log.Printf("All packages passed analysis — promoting full dependency tree to safe registry...")
