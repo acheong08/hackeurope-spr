@@ -25,5 +25,19 @@ services:
     ports:
       - "8001:8001"
 
+  backend-service:
+    build: .
+    container_name: backend-service
+    restart: always
+    environment:
+      MONGO_URI: mongodb://root:example@mongo:27017
+      DB_NAME: tracee_analysis
+      REGISTRY_TOKEN: 
+      GITHUB_TOKEN: 
+    ports:
+      - "8080:8080"
+
+
+
 volumes:
   mongo_data:
