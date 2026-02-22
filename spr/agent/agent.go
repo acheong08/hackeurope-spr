@@ -1,4 +1,4 @@
-package main
+package agent
 
 import (
 	"context"
@@ -98,69 +98,58 @@ func fetchSpecificTool(ctx context.Context, input SpecificInput, call fantasy.To
 	}, nil
 }
 
-func main() {
+// AnalyzeCollection runs the security analysis agent for a given collection/module name.
+func AnalyzeCollection(ctx context.Context, moduleName string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		fmt.Println("OPENAI_API_KEY required")
-		return
+		return "", fmt.Errorf("OPENAI_API_KEY required")
 	}
 
-	provider, err := openaicompat.New(openaicompat.WithBaseURL("https://api.synthetic.new/openai/v1"), openaicompat.WithAPIKey(apiKey))
+	provider, err := openaicompat.New(
+		openaicompat.WithBaseURL("https://api.synthetic.new/openai/v1"),
+		openaicompat.WithAPIKey(apiKey),
+	)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
-	ctx := context.Background()
 	model, err := provider.LanguageModel(ctx, "hf:moonshotai/Kimi-K2.5")
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
 	// ---- Tools ----
 
 	statsTool := fantasy.NewAgentTool(
 		"fetch_stats",
-		`Fetch summary stats for a Tracee collection.
-Example: fetch_stats({"collection":"tracee_20260221_140853_51fac1"})`,
+		`Fetch summary stats for a Tracee collection.`,
 		fetchStatsTool,
 	)
-	
+
 	statsPerProcessTool := fantasy.NewAgentTool(
 		"fetch_stats_per_process",
-		`Fetch summary stats per process for a Tracee collection.
-Example: fetch_stats_per_process({"collection":"tracee_20260221_140853_51fac1"})`,
+		`Fetch summary stats per process for a Tracee collection.`,
 		fetchStatsPerProcessTool,
 	)
 
 	specificTool := fantasy.NewAgentTool(
 		"fetch_specific",
-		`Fetch detailed DNS/file/command events for a Tracee query string.
-Examples:
-fetch_specific({"query":"tracee_...?...dns=git.duti.dev"})
-fetch_specific({"query":"tracee_...?...command=/usr/bin/sh"})
-fetch_specific({"query":"tracee_...?...file=/etc/passwd"})`,
+		`Fetch detailed DNS/file/command events for a Tracee query string.`,
 		fetchSpecificTool,
 	)
-
-	// ---- System Prompt ----
 
 	systemPrompt := `
 You are a detailed npm supply chain security analyst.
 You will:
 1) Fetch summary stats with fetch_stats.
-2) Fetch stats per process to see what processes are being active
+2) Fetch stats per process.
 3) If suspicious signals appear, fetch details with fetch_specific.
-4) EXPLAIN your reasoning step by step in your final response.
+4) Explain your reasoning step by step in your final response.
 
-A private registry is used called git.duti.dev - it is used for package testing, you are getting the test results DON'T MARK THIS REGISTRY (git.duti.dev) ITSELF AS MALICIOUS AND DON'T MENTION THIS REGISTRY (git.duti.dev) IN THE REPORT
-Look if the module is downloading suspicious modules, tries to access sensitive files, steal credentials, priveledge escalate, spawn shells or run programs that look suspicious
-Trace contains the system activity as well like runc activity
-THE CALLS MADE BY runc ARE TO BE CONSIDERED LEGIT
-pre/post install scripts are not immidiately suspicious, UNLESS THEY ARE DOING SUSPICIOUS BEHAVIOUR
-ANY CALLS TO git.duti.dev ARE NOT THEMSELVES MALICIOUS
-Look for package behavior in it's pre/postinstall scripts as well as the tests analyze and search for untypical behavior for node packages.
-
-Always show which tools you called (with examples) in your reasoning.
+A private registry called git.duti.dev is used for testing.
+Do NOT mark this registry as malicious and do NOT mention it in the report.
+Calls made by runc are legitimate.
+Pre/post install scripts are not automatically suspicious.
 `
 
 	agent := fantasy.NewAgent(
@@ -169,23 +158,19 @@ Always show which tools you called (with examples) in your reasoning.
 		fantasy.WithTools(statsTool, statsPerProcessTool, specificTool),
 	)
 
-	// ---- User Prompt ----
-
-	userPrompt := `
-Analyze collection "module3".
+	userPrompt := fmt.Sprintf(`
+Analyze collection "%s".
 1. Call fetch_stats first.
-2. If there are suspicious flags, drill down via fetch_specific.
+2. If suspicious flags exist, drill down via fetch_specific.
 3. Include full reasoning and summary conclusion.
-`
+`, moduleName)
 
-	// ---- Run Agent ----
-
-	result, err := agent.Generate(ctx, fantasy.AgentCall{Prompt: userPrompt})
+	result, err := agent.Generate(ctx, fantasy.AgentCall{
+		Prompt: userPrompt,
+	})
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return "", err
 	}
 
-	fmt.Println("========== MODEL REASONING + CONCLUSION ==========")
-	fmt.Println(result.Response.Content.Text())
+	return result.Response.Content.Text(), nil
 }
