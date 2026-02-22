@@ -41,7 +41,7 @@ function Header({
           </h1>
         </div>
         <span
-          className="text-xs md:text-sm px-2 py-1 rounded"
+          className="text-xs px-2 py-1 rounded"
           style={{
             background: "#374151",
             color: "#9ca3af",

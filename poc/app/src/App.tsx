@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useCallback } from "react";
 import { DependencyGraph } from "./components/DependencyGraph";
 import { Terminal } from "./components/Terminal";
 import { Analysis } from "./components/Analysis";
@@ -81,6 +81,7 @@ export default function App() {
   const [showDirectOnly, setShowDirectOnly] = useState(false);
 
   const { send, subscribe, isConnected } = useContext(SocketContext);
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
 
   // Subscribe to WebSocket messages
   useEffect(() => {
@@ -131,7 +132,16 @@ export default function App() {
                     id: `${pkg.id}-${dependentNode.id}`,
                     source: pkg.id,
                     target: dependentNode.id,
-                    markerEnd: { type: MarkerType.ArrowClosed },
+                    type: 'straight', // Force straight lines
+                    animated: true,   // Enable the flow animation
+                    markerEnd: { 
+                      type: MarkerType.ArrowClosed,
+                      color: "#22c55e", // Matches your "Safe" green theme
+                    },
+                    style: { 
+                      stroke: "#22c55e", 
+                      strokeWidth: 2 
+                    },
                   });
                 }
               });
@@ -273,14 +283,20 @@ export default function App() {
     setLogs((curLogs) => [...curLogs, log]);
   };
 
-  const handleNodeClick = (nodeId: string) => {
-    if (selectedNode == nodeId) {
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (selectedNode == node.id) {
       setSelectedNode(null);
       setSelectedTab(Tab.LOGS);
     } else {
-      setSelectedNode(nodeId);
+      setSelectedNode(node.id);
     }
-  };
+
+    setExpandedNodeIds((prev) => {
+      const next = new Set(prev);
+      const children = new Set(edges.filter(e => e.source == node.id).map(e => e.target));
+      return new Set([...next, ...children]);
+    });
+  }, [nodes, edges]);
 
   const handleSetPanel = (tab: Tab) => {
     setSelectedTab(tab);
@@ -370,15 +386,13 @@ export default function App() {
             <div className="h-full border-r" style={{ borderColor: "#374151" }}>
               <DependencyGraph
                 progress={progress}
-                onNodeClick={handleNodeClick}
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
-                showDirectOnly={showDirectOnly}
-                onToggleDirectOnly={handleToggleDirectOnly}
-                directDepCount={directDependencyIds.size}
-                totalDepCount={allNodes.length}
+                expandedNodeIds={expandedNodeIds}
+                setExpandedNodeIds={setExpandedNodeIds}
+                handleNodeClick={handleNodeClick}
               />
             </div>
           </ResizablePanel>
