@@ -302,6 +302,9 @@ func runCheckCommand(args []string) {
 	}
 	defer os.RemoveAll(tempDir)
 
+	// Get API key from environment for AI analysis
+	apiKey := os.Getenv("OPENAI_API_KEY")
+
 	// Run analysis workflows
 	fmt.Printf("\nTriggering analysis workflows for %d direct dependencies (max %d concurrent)...\n", len(packagesToAnalyze), concurrency)
 
@@ -314,6 +317,7 @@ func runCheckCommand(args []string) {
 		time.Duration(timeoutMinutes)*time.Minute,
 		nil, // No progress callback for CLI
 		baselinePath,
+		apiKey,
 	)
 
 	_, err = orch.RunPackages(ctx, packagesToAnalyze, tempDir, outputDir)

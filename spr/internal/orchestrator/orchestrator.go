@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/acheong08/hackeurope-spr/internal/aggregate"
+	"github.com/acheong08/hackeurope-spr/internal/analysis"
 	"github.com/acheong08/hackeurope-spr/internal/tester"
 	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
@@ -30,6 +31,7 @@ type Orchestrator struct {
 	progressCb   ProgressCallback
 	baselinePath string
 	baseline     *aggregate.PerProcessStats
+	apiKey       string // API key for AI analysis
 }
 
 // PackageResult holds the result of analyzing a single package
@@ -42,7 +44,7 @@ type PackageResult struct {
 }
 
 // NewOrchestrator creates a new orchestrator
-func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, timeout time.Duration, progressCb ProgressCallback, baselinePath string) *Orchestrator {
+func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, timeout time.Duration, progressCb ProgressCallback, baselinePath string, apiKey string) *Orchestrator {
 	o := &Orchestrator{
 		client:       NewGitHubClient(token, owner, repo),
 		workflowFile: workflowFile,
@@ -50,6 +52,7 @@ func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, t
 		timeout:      timeout,
 		progressCb:   progressCb,
 		baselinePath: baselinePath,
+		apiKey:       apiKey,
 	}
 
 	// Load baseline if provided
@@ -75,6 +78,7 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 
 	// Create a cancellable context for early termination
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// Create channels for work distribution and result collection
 	workChan := make(chan models.Package, len(packages))
@@ -143,6 +147,13 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 	fmt.Printf("Waiting for artifact copies to complete...\n")
 	copyWg.Wait()
 	fmt.Printf("All artifacts copied successfully\n")
+
+	// Run AI security analysis if API key is provided
+	if o.apiKey != "" && o.baseline != nil {
+		if err := o.runAIAnalysis(ctx, packages, outputDir); err != nil {
+			return results, fmt.Errorf("AI analysis failed: %w", err)
+		}
+	}
 
 	return results, nil
 }
@@ -563,6 +574,48 @@ func copyDirContents(src, dst string) error {
 				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+// runAIAnalysis runs AI security analysis on all packages with diffs
+func (o *Orchestrator) runAIAnalysis(ctx context.Context, packages []models.Package, outputDir string) error {
+	if o.apiKey == "" {
+		return nil
+	}
+
+	// Create analyzer with concurrency limit of 5
+	analyzer, err := analysis.NewAnalyzer(o.apiKey, 5)
+	if err != nil {
+		return fmt.Errorf("failed to create analyzer: %w", err)
+	}
+
+	// Build list of packages to analyze
+	var packagesToAnalyze []analysis.PackageInfo
+	for _, pkg := range packages {
+		normalizedName := tester.NormalizePackageName(pkg.Name)
+		pkgOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", normalizedName, pkg.Version))
+		diffPath := filepath.Join(pkgOutputDir, "diff.json")
+
+		// Check if diff.json exists
+		if _, err := os.Stat(diffPath); err == nil {
+			packagesToAnalyze = append(packagesToAnalyze, analysis.PackageInfo{
+				Name:      pkg.Name,
+				Version:   pkg.Version,
+				OutputDir: pkgOutputDir,
+			})
+		}
+	}
+
+	if len(packagesToAnalyze) == 0 {
+		log.Printf("No packages with diff.json found for AI analysis")
+		return nil
+	}
+
+	log.Printf("Running AI security analysis on %d packages...", len(packagesToAnalyze))
+	if err := analyzer.AnalyzePackages(ctx, packagesToAnalyze); err != nil {
+		return err
 	}
 
 	return nil

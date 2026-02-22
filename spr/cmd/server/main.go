@@ -35,6 +35,9 @@ type Config struct {
 
 	// Baseline for diff generation
 	BaselinePath string
+
+	// OpenAI API key for AI analysis
+	OpenAIAPIKey string
 }
 
 func loadConfig() (*Config, error) {
@@ -51,6 +54,7 @@ func loadConfig() (*Config, error) {
 		RepoName:      getEnv("REPO_NAME", "hackeurope-spr"),
 		MongoURI:      getEnv("MONGO_URI", "mongodb://localhost:27017"),
 		BaselinePath:  getEnv("BASELINE_PATH", "safe-sample.json"),
+		OpenAIAPIKey:  getEnv("OPENAI_API_KEY", ""),
 	}
 
 	// Validate required fields
@@ -201,7 +205,7 @@ func (c *Client) handleAnalyze(msg server.Message) {
 
 	// Run analysis pipeline
 	pipeline := server.NewPipeline(c.config.RegistryURL, c.config.RegistryToken, c.config.RegistryOwner,
-		c.config.GitHubToken, c.config.RepoOwner, c.config.RepoName, c, c.config.BaselinePath)
+		c.config.GitHubToken, c.config.RepoOwner, c.config.RepoName, c, c.config.BaselinePath, c.config.OpenAIAPIKey)
 
 	if err := pipeline.Run(c.analysisCtx, payload.PackageJSON); err != nil {
 		if c.analysisCtx.Err() == context.Canceled {

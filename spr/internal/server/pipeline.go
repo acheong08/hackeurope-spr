@@ -37,6 +37,7 @@ type Pipeline struct {
 
 	// Analysis settings
 	baselinePath string
+	apiKey       string // API key for AI analysis
 
 	// Progress sender
 	sender ProgressSender
@@ -46,7 +47,7 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new pipeline instance
-func NewPipeline(registryURL, registryToken, registryOwner, githubToken, repoOwner, repoName string, sender ProgressSender, baselinePath string) *Pipeline {
+func NewPipeline(registryURL, registryToken, registryOwner, githubToken, repoOwner, repoName string, sender ProgressSender, baselinePath string, apiKey string) *Pipeline {
 	return &Pipeline{
 		registryURL:   registryURL,
 		registryToken: registryToken,
@@ -55,6 +56,7 @@ func NewPipeline(registryURL, registryToken, registryOwner, githubToken, repoOwn
 		repoOwner:     repoOwner,
 		repoName:      repoName,
 		baselinePath:  baselinePath,
+		apiKey:        apiKey,
 		sender:        sender,
 	}
 }
@@ -290,6 +292,7 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 			p.sender.SendLog(fmt.Sprintf("Downloaded %d artifacts for %s@%s", artifactCount, pkgName, pkgVersion), "success")
 		},
 		p.baselinePath,
+		p.apiKey,
 	)
 
 	// Send status updates for each package
