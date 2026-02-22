@@ -1,24 +1,6 @@
 import { Shield, HardDrive, Network, Terminal, Activity } from 'lucide-react';
 import { useState } from 'react';
-
-type Data = {
-  collection: string;
-  per_process: Record<string, {
-    syscall_profile: Record<string, number>;
-    file_access: Record<string, number>;
-    executed_commands: Record<string, number>;
-    network_activity: {
-      ips: Record<string, number>;
-      dns_records: Record<string, number>
-    }
-  }>;
-  count_processes: number;
-  baseline_source: string;
-  removed_processes: number;
-  removed_files: number;
-  removed_commands: number;
-  removed_syscalls: number;
-};
+import { type Data } from '../types/Data';
 
 interface AnalysisProps {
   selectedNode: string | null;
