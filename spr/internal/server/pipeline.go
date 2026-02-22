@@ -315,6 +315,11 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 		graph,
 	)
 
+	// Forward orchestrator + analyzer logs to WebSocket
+	orch.SetLogCallback(func(message, level string) {
+		p.sender.SendLog(message, level)
+	})
+
 	// Mark all packages pending
 	for _, pkg := range packages {
 		p.sender.SendMessage(NewPackageStatusMessage(pkg.ID, pkg.Name, pkg.Version, "pending", 0))

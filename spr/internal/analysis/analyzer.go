@@ -39,10 +39,15 @@ JUDGMENT CRITERIA:
 
 Provide a thorough justification explaining your reasoning.`
 
+// LogCallback is an optional function for forwarding log messages (e.g. to WebSocket).
+// level is one of "info", "success", "warning", "error".
+type LogCallback func(message, level string)
+
 // Analyzer handles AI-powered security analysis of packages
 type Analyzer struct {
 	model     fantasy.LanguageModel
 	semaphore chan struct{} // Limits concurrent analysis
+	logCb     LogCallback
 }
 
 // NewAnalyzer creates a new analyzer with the specified concurrency limit
@@ -71,13 +76,35 @@ func NewAnalyzer(apiKey string, concurrencyLimit int) (*Analyzer, error) {
 	}, nil
 }
 
+// SetLogCallback sets an optional callback for forwarding log messages.
+func (a *Analyzer) SetLogCallback(cb LogCallback) {
+	a.logCb = cb
+}
+
+// log prints to console and optionally forwards to the log callback.
+func (a *Analyzer) log(message, level string) {
+	prefix := "[INFO]"
+	switch level {
+	case "success":
+		prefix = "[SUCCESS]"
+	case "warning":
+		prefix = "[WARN]"
+	case "error":
+		prefix = "[ERROR]"
+	}
+	log.Printf("%s %s", prefix, message)
+	if a.logCb != nil {
+		a.logCb(message, level)
+	}
+}
+
 // AnalyzePackages performs AI security analysis on multiple packages in parallel
 func (a *Analyzer) AnalyzePackages(ctx context.Context, packages []PackageInfo) error {
 	if len(packages) == 0 {
 		return nil
 	}
 
-	log.Printf("Starting AI security analysis for %d packages (max %d concurrent)", len(packages), cap(a.semaphore))
+	a.log(fmt.Sprintf("Starting AI security analysis for %d packages (max %d concurrent)", len(packages), cap(a.semaphore)), "info")
 
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(packages))
@@ -126,7 +153,7 @@ func (a *Analyzer) AnalyzePackages(ctx context.Context, packages []PackageInfo) 
 		return errs[0] // Return first error (fail fast)
 	}
 
-	log.Printf("Completed AI security analysis for %d packages", len(packages))
+	a.log(fmt.Sprintf("Completed AI security analysis for %d packages", len(packages)), "success")
 	return nil
 }
 
@@ -142,7 +169,7 @@ func (a *Analyzer) analyzePackage(ctx context.Context, pkg PackageInfo) error {
 	// Check if analysis already exists (caching)
 	analysisPath := filepath.Join(pkg.OutputDir, "ai-analysis.json")
 	if _, err := os.Stat(analysisPath); err == nil {
-		log.Printf("  [AI] Using cached analysis for %s@%s", pkg.Name, pkg.Version)
+		a.log(fmt.Sprintf("Using cached analysis for %s@%s", pkg.Name, pkg.Version), "info")
 		return nil
 	}
 
@@ -161,7 +188,7 @@ func (a *Analyzer) analyzePackage(ctx context.Context, pkg PackageInfo) error {
 
 	// Skip analysis if no anomalous behavior
 	if len(deduped.PerProcess) == 0 {
-		log.Printf("  [AI] No anomalous behavior for %s@%s, skipping analysis", pkg.Name, pkg.Version)
+		a.log(fmt.Sprintf("No anomalous behavior for %s@%s, skipping analysis", pkg.Name, pkg.Version), "info")
 		assessment := SecurityAssessment{
 			IsMalicious:   false,
 			Confidence:    1.0,
@@ -202,8 +229,11 @@ func (a *Analyzer) analyzePackage(ctx context.Context, pkg PackageInfo) error {
 		return fmt.Errorf("failed to save analysis: %w", err)
 	}
 
-	log.Printf("  [AI] Completed analysis for %s@%s - Malicious: %v (confidence: %.2f)",
-		pkg.Name, pkg.Version, report.IsMalicious, report.Confidence)
+	if report.IsMalicious {
+		a.log(fmt.Sprintf("Flagged %s@%s as MALICIOUS (confidence: %.2f)", pkg.Name, pkg.Version, report.Confidence), "warning")
+	} else {
+		a.log(fmt.Sprintf("Analyzed %s@%s — SAFE (confidence: %.2f)", pkg.Name, pkg.Version, report.Confidence), "success")
+	}
 
 	return nil
 }

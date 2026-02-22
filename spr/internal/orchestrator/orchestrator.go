@@ -23,6 +23,9 @@ import (
 // ProgressCallback is called when a package's artifacts are successfully copied
 type ProgressCallback func(pkgName, pkgVersion string, artifactCount int)
 
+// LogCallback is an optional function for forwarding log messages (e.g. to WebSocket).
+type LogCallback func(message, level string)
+
 // Orchestrator manages GitHub Actions workflow runs for packages
 type Orchestrator struct {
 	client       *GitHubClient
@@ -30,6 +33,7 @@ type Orchestrator struct {
 	concurrency  int
 	timeout      time.Duration
 	progressCb   ProgressCallback
+	logCb        LogCallback
 	baselinePath string
 	baseline     *aggregate.PerProcessStats
 	apiKey       string // API key for AI analysis
@@ -68,13 +72,35 @@ func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, t
 	if baselinePath != "" {
 		if baseline, err := aggregate.LoadPerProcessStats(baselinePath); err == nil {
 			o.baseline = baseline
-			log.Printf("Loaded baseline from %s (%d processes)\n", baselinePath, baseline.CountProcesses)
+			o.logMsg(fmt.Sprintf("Loaded baseline from %s (%d processes)", baselinePath, baseline.CountProcesses), "info")
 		} else {
-			log.Printf("Warning: failed to load baseline from %s: %v\n", baselinePath, err)
+			o.logMsg(fmt.Sprintf("Failed to load baseline from %s: %v", baselinePath, err), "warning")
 		}
 	}
 
 	return o
+}
+
+// SetLogCallback sets an optional callback for forwarding log messages.
+func (o *Orchestrator) SetLogCallback(cb LogCallback) {
+	o.logCb = cb
+}
+
+// logMsg prints to console and optionally forwards via the log callback.
+func (o *Orchestrator) logMsg(message, level string) {
+	prefix := "[INFO]"
+	switch level {
+	case "success":
+		prefix = "[SUCCESS]"
+	case "warning":
+		prefix = "[WARN]"
+	case "error":
+		prefix = "[ERROR]"
+	}
+	log.Printf("%s %s", prefix, message)
+	if o.logCb != nil {
+		o.logCb(message, level)
+	}
 }
 
 // RunPackages triggers workflows for all packages and collects results
@@ -83,7 +109,7 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 		return nil, fmt.Errorf("no packages to analyze")
 	}
 
-	fmt.Printf("Starting analysis of %d packages (max %d concurrent)\n", len(packages), o.concurrency)
+	o.logMsg(fmt.Sprintf("Starting analysis of %d packages (max %d concurrent)", len(packages), o.concurrency), "info")
 
 	// Create a cancellable context for early termination
 	ctx, cancel := context.WithCancel(ctx)
@@ -135,11 +161,10 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 			}
 		}
 		results = append(results, result)
-		fmt.Printf("  [%d/%d] %s@%s - ", completed, len(packages), result.Package.Name, result.Package.Version)
 		if result.Error != nil {
-			fmt.Printf("FAILED: %v\n", result.Error)
+			o.logMsg(fmt.Sprintf("[%d/%d] %s@%s — FAILED: %v", completed, len(packages), result.Package.Name, result.Package.Version, result.Error), "error")
 		} else {
-			fmt.Printf("SUCCESS (%d artifacts)\n", len(result.Artifacts))
+			o.logMsg(fmt.Sprintf("[%d/%d] %s@%s — SUCCESS (%d artifacts)", completed, len(packages), result.Package.Name, result.Package.Version, len(result.Artifacts)), "success")
 		}
 	}
 
@@ -150,12 +175,12 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 		}
 	}
 
-	fmt.Printf("\nCompleted analysis: %d/%d packages successful\n", len(packages)-failed, len(packages))
+	o.logMsg(fmt.Sprintf("Completed analysis: %d/%d packages successful", len(packages)-failed, len(packages)), "info")
 
 	// Wait for all artifact copy goroutines to complete
-	fmt.Printf("Waiting for artifact copies to complete...\n")
+	o.logMsg("Waiting for artifact copies to complete...", "info")
 	copyWg.Wait()
-	fmt.Printf("All artifacts copied successfully\n")
+	o.logMsg("All artifacts copied successfully", "success")
 
 	// Run AI security analysis if API key is provided
 	if o.apiKey != "" && o.baseline != nil {
@@ -208,7 +233,7 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 
 	if _, err := os.Stat(cachedBehaviorPath); err == nil {
 		// Cached file exists, use it instead of running workflow
-		fmt.Printf("    [Worker] Using cached behavior.jsonl for %s@%s\n", pkg.Name, pkg.Version)
+		o.logMsg(fmt.Sprintf("Using cached behavior.jsonl for %s@%s", pkg.Name, pkg.Version), "info")
 
 		// Copy cached file to tempDir for processing
 		artifactDir := filepath.Join(tempDir, fmt.Sprintf("%s@%s", normalizedPkgName, pkg.Version))
@@ -234,7 +259,7 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 		if o.baseline != nil {
 			if _, err := os.Stat(filepath.Join(cacheDir, "diff.json")); os.IsNotExist(err) {
 				if err := o.generateDiff(cachedBehaviorPath); err != nil {
-					log.Printf("    [Worker] Warning: failed to generate diff for cached %s@%s: %v\n", pkg.Name, pkg.Version, err)
+					o.logMsg(fmt.Sprintf("Failed to generate diff for cached %s@%s: %v", pkg.Name, pkg.Version, err), "warning")
 				}
 			}
 		}
@@ -244,7 +269,7 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 		if diffData, err := os.ReadFile(cachedDiffPath); err == nil {
 			diffDestPath := filepath.Join(artifactDir, "diff.json")
 			if err := os.WriteFile(diffDestPath, diffData, 0o644); err != nil {
-				log.Printf("    [Worker] Warning: failed to copy cached diff.json: %v\n", err)
+				o.logMsg(fmt.Sprintf("Failed to copy cached diff.json: %v", err), "warning")
 			}
 		}
 
@@ -252,23 +277,23 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 		if outputDir != "" {
 			pkgOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", normalizedPkgName, pkg.Version))
 			if err := os.MkdirAll(pkgOutputDir, 0o755); err != nil {
-				log.Printf("    [Worker] Warning: failed to create output directory for cached %s@%s: %v\n", pkg.Name, pkg.Version, err)
+				o.logMsg(fmt.Sprintf("Failed to create output directory for cached %s@%s: %v", pkg.Name, pkg.Version, err), "warning")
 			} else {
 				// Copy behavior.jsonl
 				if err := os.WriteFile(filepath.Join(pkgOutputDir, "behavior.jsonl"), data, 0o644); err != nil {
-					log.Printf("    [Worker] Warning: failed to copy cached behavior.jsonl to output: %v\n", err)
+					o.logMsg(fmt.Sprintf("Failed to copy cached behavior.jsonl to output: %v", err), "warning")
 				}
 				// Copy diff.json if it exists
 				if diffData, err := os.ReadFile(cachedDiffPath); err == nil {
 					if err := os.WriteFile(filepath.Join(pkgOutputDir, "diff.json"), diffData, 0o644); err != nil {
-						log.Printf("    [Worker] Warning: failed to copy cached diff.json to output: %v\n", err)
+						o.logMsg(fmt.Sprintf("Failed to copy cached diff.json to output: %v", err), "warning")
 					}
 				}
 				// Copy ai-analysis.json if it exists in cache
 				cachedAIPath := filepath.Join(cacheDir, "ai-analysis.json")
 				if aiData, err := os.ReadFile(cachedAIPath); err == nil {
 					if err := os.WriteFile(filepath.Join(pkgOutputDir, "ai-analysis.json"), aiData, 0o644); err != nil {
-						log.Printf("    [Worker] Warning: failed to copy cached ai-analysis.json to output: %v\n", err)
+						o.logMsg(fmt.Sprintf("Failed to copy cached ai-analysis.json to output: %v", err), "warning")
 					}
 				}
 
@@ -299,7 +324,7 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 	}
 
 	result.RunID = triggerResp.RunID
-	fmt.Printf("    [Worker] Triggered workflow for %s@%s (run ID: %d)\n", pkg.Name, pkg.Version, triggerResp.RunID)
+	o.logMsg(fmt.Sprintf("Triggered workflow for %s@%s (run ID: %d)", pkg.Name, pkg.Version, triggerResp.RunID), "info")
 
 	// 3. Poll for completion
 	run, err := o.pollWorkflowCompletion(ctx, triggerResp.RunID)
@@ -330,7 +355,7 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 			// Check if context is cancelled before starting
 			select {
 			case <-ctx.Done():
-				log.Printf("    [Worker] Skipping artifact copy for %s@%s: context cancelled\n", pkgName, pkgVersion)
+				o.logMsg(fmt.Sprintf("Skipping artifact copy for %s@%s: context cancelled", pkgName, pkgVersion), "warning")
 				return
 			default:
 			}
@@ -338,7 +363,7 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 			normalizedPkgName := tester.NormalizePackageName(pkgName)
 			pkgOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", normalizedPkgName, pkgVersion))
 			if err := os.MkdirAll(pkgOutputDir, 0o755); err != nil {
-				log.Printf("    [Worker] Warning: failed to create output directory for %s@%s: %v\n", pkgName, pkgVersion, err)
+				o.logMsg(fmt.Sprintf("Failed to create output directory for %s@%s: %v", pkgName, pkgVersion, err), "warning")
 				return
 			}
 
@@ -346,23 +371,23 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 				// Check context before each file copy
 				select {
 				case <-ctx.Done():
-					log.Printf("    [Worker] Aborting artifact copy for %s@%s: context cancelled\n", pkgName, pkgVersion)
+					o.logMsg(fmt.Sprintf("Aborting artifact copy for %s@%s: context cancelled", pkgName, pkgVersion), "warning")
 					return
 				default:
 					// Copy contents of artifact directory directly into pkgOutputDir (flatten structure)
 					if err := copyDirContents(artifactPath, pkgOutputDir); err != nil {
-						log.Printf("    [Worker] Warning: failed to copy artifact %s: %v\n", artifactPath, err)
+						o.logMsg(fmt.Sprintf("Failed to copy artifact %s: %v", artifactPath, err), "warning")
 					}
 				}
 			}
-			log.Printf("    [Worker] Copied %d artifacts for %s@%s to output\n", len(artifactPaths), pkgName, pkgVersion)
+			o.logMsg(fmt.Sprintf("Copied %d artifacts for %s@%s to output", len(artifactPaths), pkgName, pkgVersion), "info")
 
 			// Generate diff.json if baseline is available
 			if o.baseline != nil {
 				behaviorPath := filepath.Join(pkgOutputDir, "behavior.jsonl")
 				if _, err := os.Stat(behaviorPath); err == nil {
 					if err := o.generateDiff(behaviorPath); err != nil {
-						log.Printf("    [Worker] Warning: failed to generate diff for %s@%s: %v\n", pkgName, pkgVersion, err)
+						o.logMsg(fmt.Sprintf("Failed to generate diff for %s@%s: %v", pkgName, pkgVersion, err), "warning")
 					}
 				}
 			}
@@ -398,7 +423,7 @@ func (o *Orchestrator) pollWorkflowCompletion(ctx context.Context, runID int64) 
 		}
 
 		attempt++
-		log.Printf("    [Worker] Polling workflow run %d (attempt %d)\n", runID, attempt)
+		o.logMsg(fmt.Sprintf("Polling workflow run %d (attempt %d)", runID, attempt), "info")
 
 		run, err := o.client.GetWorkflowRun(ctx, runID)
 		if err != nil {
@@ -636,6 +661,13 @@ func (o *Orchestrator) runAIAnalysis(ctx context.Context, packages []models.Pack
 		return fmt.Errorf("failed to create analyzer: %w", err)
 	}
 
+	// Chain log callback so analyzer logs go to WebSocket too
+	if o.logCb != nil {
+		analyzer.SetLogCallback(func(message, level string) {
+			o.logCb(message, level)
+		})
+	}
+
 	// Build list of packages to analyze
 	var packagesToAnalyze []analysis.PackageInfo
 	for _, pkg := range packages {
@@ -654,11 +686,11 @@ func (o *Orchestrator) runAIAnalysis(ctx context.Context, packages []models.Pack
 	}
 
 	if len(packagesToAnalyze) == 0 {
-		log.Printf("No packages with diff.json found for AI analysis")
+		o.logMsg("No packages with diff.json found for AI analysis", "info")
 		return nil
 	}
 
-	log.Printf("Running AI security analysis on %d packages...", len(packagesToAnalyze))
+	o.logMsg(fmt.Sprintf("Running AI security analysis on %d packages...", len(packagesToAnalyze)), "info")
 	if err := analyzer.AnalyzePackages(ctx, packagesToAnalyze); err != nil {
 		return err
 	}
@@ -674,7 +706,7 @@ func (o *Orchestrator) promoteToSafeRegistry(ctx context.Context, packages []mod
 		return nil
 	}
 
-	log.Printf("Checking AI analysis results before promoting to safe registry...")
+	o.logMsg("Checking AI analysis results before promoting to safe registry...", "info")
 
 	var blocked []string
 
@@ -686,7 +718,7 @@ func (o *Orchestrator) promoteToSafeRegistry(ctx context.Context, packages []mod
 		if err != nil {
 			if os.IsNotExist(err) {
 				// No analysis file → no anomalies detected → treat as safe
-				log.Printf("  [Promote] %s@%s: no AI analysis (clean diff), treating as safe", pkg.Name, pkg.Version)
+				o.logMsg(fmt.Sprintf("%s@%s: no AI analysis (clean diff), treating as safe", pkg.Name, pkg.Version), "info")
 				continue
 			}
 			return fmt.Errorf("failed to read ai-analysis.json for %s@%s: %w", pkg.Name, pkg.Version, err)
@@ -700,27 +732,27 @@ func (o *Orchestrator) promoteToSafeRegistry(ctx context.Context, packages []mod
 		if assessment.IsMalicious {
 			blocked = append(blocked, fmt.Sprintf("%s@%s (confidence=%.2f): %s",
 				pkg.Name, pkg.Version, assessment.Confidence, assessment.Justification))
-			log.Printf("  [Promote] BLOCKED %s@%s — %s", pkg.Name, pkg.Version, assessment.Justification)
+			o.logMsg(fmt.Sprintf("BLOCKED %s@%s — %s", pkg.Name, pkg.Version, assessment.Justification), "error")
 		} else {
-			log.Printf("  [Promote] %s@%s: safe (confidence=%.2f)", pkg.Name, pkg.Version, assessment.Confidence)
+			o.logMsg(fmt.Sprintf("%s@%s: safe (confidence=%.2f)", pkg.Name, pkg.Version, assessment.Confidence), "success")
 		}
 	}
 
 	if len(blocked) > 0 {
-		log.Printf("Promotion skipped — %d package(s) flagged as malicious:", len(blocked))
+		o.logMsg(fmt.Sprintf("Promotion skipped — %d package(s) flagged as malicious:", len(blocked)), "warning")
 		for _, b := range blocked {
-			log.Printf("  - %s", b)
+			o.logMsg(fmt.Sprintf("  - %s", b), "warning")
 		}
 		// Don't return an error — let the caller continue so it can
 		// emit results (e.g. red nodes in the frontend).
 		return nil
 	}
 
-	log.Printf("All packages passed analysis — promoting full dependency tree to safe registry...")
+	o.logMsg("All packages passed analysis — promoting full dependency tree to safe registry...", "success")
 	if err := o.safeUploader.UploadGraph(ctx, o.graph); err != nil {
 		return fmt.Errorf("failed to promote packages to safe registry: %w", err)
 	}
 
-	log.Printf("Successfully promoted dependency tree to safe registry")
+	o.logMsg("Successfully promoted dependency tree to safe registry", "success")
 	return nil
 }
