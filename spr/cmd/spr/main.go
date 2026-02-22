@@ -31,6 +31,12 @@ type Config struct {
 	TimeoutMinutes  int
 	BaselinePath    string
 	OpenAIAPIKey    string
+
+	// Safe registry — packages are promoted here after passing AI analysis.
+	// Leave SAFE_REGISTRY_TOKEN empty to disable promotion.
+	SafeRegistryURL   string
+	SafeRegistryToken string
+	SafeRegistryOwner string
 }
 
 func loadConfig() *Config {
@@ -50,6 +56,10 @@ func loadConfig() *Config {
 		TimeoutMinutes: getEnvInt("TIMEOUT_MINUTES", 5),
 		BaselinePath:   getEnv("BASELINE_PATH", "safe-sample.json"),
 		OpenAIAPIKey:   getEnv("OPENAI_API_KEY", ""),
+
+		SafeRegistryURL:   getEnv("SAFE_REGISTRY_URL", "https://git.duti.dev"),
+		SafeRegistryToken: getEnv("SAFE_REGISTRY_TOKEN", ""),
+		SafeRegistryOwner: getEnv("SAFE_REGISTRY_OWNER", "secure"),
 	}
 }
 
@@ -348,6 +358,15 @@ func runCheckCommand(cfg *Config, args []string) {
 	// Run analysis workflows
 	fmt.Printf("\nTriggering analysis workflows for %d direct dependencies (max %d concurrent)...\n", len(packagesToAnalyze), cfg.Concurrency)
 
+	// Build safe registry uploader (nil when token not configured → promotion disabled)
+	var safeUploader *registry.Uploader
+	if cfg.SafeRegistryToken != "" {
+		safeUploader = registry.NewUploader(cfg.SafeRegistryURL, cfg.SafeRegistryOwner, cfg.SafeRegistryToken)
+		fmt.Printf("Safe registry promotion enabled (%s / %s)\n", cfg.SafeRegistryURL, cfg.SafeRegistryOwner)
+	} else {
+		fmt.Println("Safe registry promotion disabled (SAFE_REGISTRY_TOKEN not set)")
+	}
+
 	orch := orchestrator.NewOrchestrator(
 		cfg.GitHubToken,
 		cfg.RepoOwner,
@@ -358,6 +377,8 @@ func runCheckCommand(cfg *Config, args []string) {
 		nil, // No progress callback for CLI
 		cfg.BaselinePath,
 		cfg.OpenAIAPIKey,
+		safeUploader,
+		graph,
 	)
 
 	_, err = orch.RunPackages(ctx, packagesToAnalyze, tempDir, cfg.OutputDir)

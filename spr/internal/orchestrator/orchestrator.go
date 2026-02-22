@@ -15,6 +15,7 @@ import (
 
 	"github.com/acheong08/hackeurope-spr/internal/aggregate"
 	"github.com/acheong08/hackeurope-spr/internal/analysis"
+	"github.com/acheong08/hackeurope-spr/internal/registry"
 	"github.com/acheong08/hackeurope-spr/internal/tester"
 	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
@@ -32,6 +33,11 @@ type Orchestrator struct {
 	baselinePath string
 	baseline     *aggregate.PerProcessStats
 	apiKey       string // API key for AI analysis
+
+	// Safe registry — nil means promotion is disabled
+	safeUploader *registry.Uploader
+	// Full dependency graph, needed for full-tree promotion
+	graph *models.DependencyGraph
 }
 
 // PackageResult holds the result of analyzing a single package
@@ -43,8 +49,9 @@ type PackageResult struct {
 	Error     error
 }
 
-// NewOrchestrator creates a new orchestrator
-func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, timeout time.Duration, progressCb ProgressCallback, baselinePath string, apiKey string) *Orchestrator {
+// NewOrchestrator creates a new orchestrator.
+// safeUploader and graph are optional (nil disables safe-registry promotion).
+func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, timeout time.Duration, progressCb ProgressCallback, baselinePath string, apiKey string, safeUploader *registry.Uploader, graph *models.DependencyGraph) *Orchestrator {
 	o := &Orchestrator{
 		client:       NewGitHubClient(token, owner, repo),
 		workflowFile: workflowFile,
@@ -53,6 +60,8 @@ func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, t
 		progressCb:   progressCb,
 		baselinePath: baselinePath,
 		apiKey:       apiKey,
+		safeUploader: safeUploader,
+		graph:        graph,
 	}
 
 	// Load baseline if provided
@@ -153,6 +162,11 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 		if err := o.runAIAnalysis(ctx, packages, outputDir); err != nil {
 			return results, fmt.Errorf("AI analysis failed: %w", err)
 		}
+	}
+
+	// Promote full dependency tree to safe registry if all packages passed
+	if err := o.promoteToSafeRegistry(ctx, packages, outputDir); err != nil {
+		return results, fmt.Errorf("safe registry promotion failed: %w", err)
 	}
 
 	return results, nil
@@ -618,5 +632,62 @@ func (o *Orchestrator) runAIAnalysis(ctx context.Context, packages []models.Pack
 		return err
 	}
 
+	return nil
+}
+
+// promoteToSafeRegistry promotes the full dependency graph to the safe registry
+// after verifying that none of the analyzed packages were flagged as malicious.
+// Packages with no ai-analysis.json (empty diff → no anomalies) are treated as safe.
+func (o *Orchestrator) promoteToSafeRegistry(ctx context.Context, packages []models.Package, outputDir string) error {
+	if o.safeUploader == nil || o.graph == nil {
+		return nil
+	}
+
+	log.Printf("Checking AI analysis results before promoting to safe registry...")
+
+	var blocked []string
+
+	for _, pkg := range packages {
+		normalizedName := tester.NormalizePackageName(pkg.Name)
+		aiPath := filepath.Join(outputDir, fmt.Sprintf("%s@%s", normalizedName, pkg.Version), "ai-analysis.json")
+
+		data, err := os.ReadFile(aiPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// No analysis file → no anomalies detected → treat as safe
+				log.Printf("  [Promote] %s@%s: no AI analysis (clean diff), treating as safe", pkg.Name, pkg.Version)
+				continue
+			}
+			return fmt.Errorf("failed to read ai-analysis.json for %s@%s: %w", pkg.Name, pkg.Version, err)
+		}
+
+		var assessment analysis.SecurityAssessment
+		if err := json.Unmarshal(data, &assessment); err != nil {
+			return fmt.Errorf("failed to parse ai-analysis.json for %s@%s: %w", pkg.Name, pkg.Version, err)
+		}
+
+		if assessment.IsMalicious {
+			blocked = append(blocked, fmt.Sprintf("%s@%s (confidence=%.2f): %s",
+				pkg.Name, pkg.Version, assessment.Confidence, assessment.Justification))
+			log.Printf("  [Promote] BLOCKED %s@%s — %s", pkg.Name, pkg.Version, assessment.Justification)
+		} else {
+			log.Printf("  [Promote] %s@%s: safe (confidence=%.2f)", pkg.Name, pkg.Version, assessment.Confidence)
+		}
+	}
+
+	if len(blocked) > 0 {
+		log.Printf("Promotion ABORTED — %d package(s) flagged as malicious:", len(blocked))
+		for _, b := range blocked {
+			log.Printf("  - %s", b)
+		}
+		return fmt.Errorf("promotion aborted: %d malicious package(s) detected: %v", len(blocked), blocked)
+	}
+
+	log.Printf("All packages passed analysis — promoting full dependency tree to safe registry...")
+	if err := o.safeUploader.UploadGraph(ctx, o.graph); err != nil {
+		return fmt.Errorf("failed to promote packages to safe registry: %w", err)
+	}
+
+	log.Printf("Successfully promoted dependency tree to safe registry")
 	return nil
 }

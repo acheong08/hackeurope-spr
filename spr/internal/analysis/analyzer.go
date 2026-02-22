@@ -190,15 +190,12 @@ func (a *Analyzer) analyzePackage(ctx context.Context, pkg PackageInfo) error {
 
 	// Call the agent
 	agent := fantasy.NewAgent(a.model, fantasy.WithSystemPrompt(systemPrompt), fantasy.WithTools(submitReportTool))
-	result, err := agent.Generate(ctx, fantasy.AgentCall{
+	_, err = agent.Generate(ctx, fantasy.AgentCall{
 		Prompt: prompt,
 	})
 	if err != nil {
 		return fmt.Errorf("agent generation failed: %w", err)
 	}
-
-	log.Printf("  [AI] Agent response for %s@%s:\n%s", pkg.Name, pkg.Version,
-		result.Response.Content.Text())
 
 	// Save the analysis
 	if err := a.saveAnalysis(pkg.OutputDir, report); err != nil {

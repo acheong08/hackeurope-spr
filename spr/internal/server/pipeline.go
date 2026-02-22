@@ -293,6 +293,8 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 		},
 		p.baselinePath,
 		p.apiKey,
+		nil, // safe registry promotion not wired up in server yet
+		nil, // dependency graph not passed here yet
 	)
 
 	// Send status updates for each package
