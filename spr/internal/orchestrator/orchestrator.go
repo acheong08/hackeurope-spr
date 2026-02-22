@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/acheong08/hackeurope-spr/internal/aggregate"
 	"github.com/acheong08/hackeurope-spr/internal/tester"
 	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
@@ -26,6 +28,8 @@ type Orchestrator struct {
 	concurrency  int
 	timeout      time.Duration
 	progressCb   ProgressCallback
+	baselinePath string
+	baseline     *aggregate.PerProcessStats
 }
 
 // PackageResult holds the result of analyzing a single package
@@ -38,14 +42,27 @@ type PackageResult struct {
 }
 
 // NewOrchestrator creates a new orchestrator
-func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, timeout time.Duration, progressCb ProgressCallback) *Orchestrator {
-	return &Orchestrator{
+func NewOrchestrator(token, owner, repo, workflowFile string, concurrency int, timeout time.Duration, progressCb ProgressCallback, baselinePath string) *Orchestrator {
+	o := &Orchestrator{
 		client:       NewGitHubClient(token, owner, repo),
 		workflowFile: workflowFile,
 		concurrency:  concurrency,
 		timeout:      timeout,
 		progressCb:   progressCb,
+		baselinePath: baselinePath,
 	}
+
+	// Load baseline if provided
+	if baselinePath != "" {
+		if baseline, err := aggregate.LoadPerProcessStats(baselinePath); err == nil {
+			o.baseline = baseline
+			log.Printf("Loaded baseline from %s (%d processes)\n", baselinePath, baseline.CountProcesses)
+		} else {
+			log.Printf("Warning: failed to load baseline from %s: %v\n", baselinePath, err)
+		}
+	}
+
+	return o
 }
 
 // RunPackages triggers workflows for all packages and collects results
@@ -188,6 +205,15 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 			return result
 		}
 
+		// Generate diff.json if it doesn't exist in cache and baseline is available
+		if o.baseline != nil {
+			if _, err := os.Stat(filepath.Join(cacheDir, "diff.json")); os.IsNotExist(err) {
+				if err := o.generateDiff(cachedBehaviorPath); err != nil {
+					log.Printf("    [Worker] Warning: failed to generate diff for cached %s@%s: %v\n", pkg.Name, pkg.Version, err)
+				}
+			}
+		}
+
 		// Also copy diff.json if it exists
 		cachedDiffPath := filepath.Join(cacheDir, "diff.json")
 		if diffData, err := os.ReadFile(cachedDiffPath); err == nil {
@@ -274,6 +300,16 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 				}
 			}
 			log.Printf("    [Worker] Copied %d artifacts for %s@%s to output\n", len(artifactPaths), pkgName, pkgVersion)
+
+			// Generate diff.json if baseline is available
+			if o.baseline != nil {
+				behaviorPath := filepath.Join(pkgOutputDir, "behavior.jsonl")
+				if _, err := os.Stat(behaviorPath); err == nil {
+					if err := o.generateDiff(behaviorPath); err != nil {
+						log.Printf("    [Worker] Warning: failed to generate diff for %s@%s: %v\n", pkgName, pkgVersion, err)
+					}
+				}
+			}
 
 			// Notify via callback if provided (sends to WebSocket)
 			if o.progressCb != nil {
@@ -362,6 +398,44 @@ func (o *Orchestrator) downloadArtifacts(ctx context.Context, runID int64, pkg m
 	}
 
 	return downloaded, nil
+}
+
+// generateDiff creates a diff.json file from behavior.jsonl if it doesn't exist
+func (o *Orchestrator) generateDiff(behaviorPath string) error {
+	// Skip if no baseline loaded
+	if o.baseline == nil {
+		return nil
+	}
+
+	// Check if diff already exists
+	diffPath := filepath.Join(filepath.Dir(behaviorPath), "diff.json")
+	if _, err := os.Stat(diffPath); err == nil {
+		// Diff already exists, skip
+		return nil
+	}
+
+	// Process behavior.jsonl
+	aggregator := aggregate.NewProcessAggregator()
+	result, err := aggregator.ProcessFile(behaviorPath, filepath.Base(filepath.Dir(behaviorPath)))
+	if err != nil {
+		return fmt.Errorf("failed to process behavior.jsonl: %w", err)
+	}
+
+	// Apply deduplication
+	deduped := aggregate.Dedup(result, o.baseline)
+
+	// Marshal to JSON
+	jsonBytes, err := json.MarshalIndent(deduped, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal diff: %w", err)
+	}
+
+	// Write diff.json
+	if err := os.WriteFile(diffPath, jsonBytes, 0o644); err != nil {
+		return fmt.Errorf("failed to write diff.json: %w", err)
+	}
+
+	return nil
 }
 
 // extractZip extracts a zip file to a directory

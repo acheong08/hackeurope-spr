@@ -35,6 +35,9 @@ type Pipeline struct {
 	repoOwner   string
 	repoName    string
 
+	// Analysis settings
+	baselinePath string
+
 	// Progress sender
 	sender ProgressSender
 
@@ -43,7 +46,7 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new pipeline instance
-func NewPipeline(registryURL, registryToken, registryOwner, githubToken, repoOwner, repoName string, sender ProgressSender) *Pipeline {
+func NewPipeline(registryURL, registryToken, registryOwner, githubToken, repoOwner, repoName string, sender ProgressSender, baselinePath string) *Pipeline {
 	return &Pipeline{
 		registryURL:   registryURL,
 		registryToken: registryToken,
@@ -51,6 +54,7 @@ func NewPipeline(registryURL, registryToken, registryOwner, githubToken, repoOwn
 		githubToken:   githubToken,
 		repoOwner:     repoOwner,
 		repoName:      repoName,
+		baselinePath:  baselinePath,
 		sender:        sender,
 	}
 }
@@ -285,6 +289,7 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 			// Send artifact success to WebSocket client
 			p.sender.SendLog(fmt.Sprintf("Downloaded %d artifacts for %s@%s", artifactCount, pkgName, pkgVersion), "success")
 		},
+		p.baselinePath,
 	)
 
 	// Send status updates for each package

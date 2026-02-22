@@ -65,6 +65,7 @@ func runCheckCommand(args []string) {
 		workflowFile    = "analyze-package.yml"
 		concurrency     = 5
 		timeoutMinutes  = 5
+		baselinePath    = "safe-sample.json"
 	)
 
 	// Parse flags manually (single dash)
@@ -132,6 +133,11 @@ func runCheckCommand(args []string) {
 				if n, err := strconv.Atoi(args[i+1]); err == nil {
 					timeoutMinutes = n
 				}
+				i++
+			}
+		case "-baseline":
+			if i+1 < len(args) {
+				baselinePath = args[i+1]
 				i++
 			}
 		case "-help":
@@ -307,6 +313,7 @@ func runCheckCommand(args []string) {
 		concurrency,
 		time.Duration(timeoutMinutes)*time.Minute,
 		nil, // No progress callback for CLI
+		baselinePath,
 	)
 
 	_, err = orch.RunPackages(ctx, packagesToAnalyze, tempDir, outputDir)
@@ -337,6 +344,7 @@ func printCheckUsage() {
 	fmt.Println("  -workflow <file>       Workflow file name (default: analyze-package.yml)")
 	fmt.Println("  -concurrency <n>       Max concurrent workflows (default: 5)")
 	fmt.Println("  -timeout <minutes>     Timeout per workflow in minutes (default: 5)")
+	fmt.Println("  -baseline <path>       Path to baseline JSON for diff generation (default: safe-sample.json)")
 	fmt.Println("  -help                  Show this help message")
 }
 
