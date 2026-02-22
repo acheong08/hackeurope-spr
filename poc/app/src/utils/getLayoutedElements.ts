@@ -7,7 +7,7 @@ const nodeHeight = 36;
 export const getLayoutedElements = (
   nodes: Node[],
   edges: Edge[],
-) => {
+): Node[] => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
@@ -45,6 +45,6 @@ export const getLayoutedElements = (
       // Essential for straight LR lines
       sourcePosition: 'right',
       targetPosition: 'left',
-    };
+    } as Node;
   });
 };

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { 
   ReactFlow, 
   Background, 
@@ -10,6 +10,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { getLayoutedElements } from '../utils/getLayoutedElements';
+import { Progress } from './ui/progress';
 
 interface DependencyGraphProps {
   progress: number;
@@ -78,12 +79,20 @@ export function DependencyGraph({
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-[#374151] bg-[#111827]">
-        <h2 className="text-lg mb-3 text-[#22c55e]">Dependency Analysis</h2>
-        <div className="space-y-2">
+        <h2 className="text-lg mb-3 text-[#9ca3af]">Dependency Analysis</h2>
+         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-[#9ca3af]">Progress</span>
-            <span className="text-[#22c55e]">{Math.round(progress)}%</span>
+            <span style={{ color: '#9ca3af' }}>Progress</span>
+            <span style={{ color: '#22c55e' }}>{Math.round(progress)}%</span>
           </div>
+          <Progress 
+            value={progress} 
+            className="h-2"
+            indicatorClassName={'bg-green-500'}
+            style={{
+              background: '#374151',
+            }}
+          />
         </div>
       </div>
       <div className="flex-1 bg-[#0a0a0a]">
