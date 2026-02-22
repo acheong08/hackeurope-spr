@@ -248,6 +248,37 @@ func (o *Orchestrator) analyzePackage(ctx context.Context, pkg models.Package, t
 			}
 		}
 
+		// Copy cached files to outputDir so AI analysis and emitPackageResults can find them
+		if outputDir != "" {
+			pkgOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s@%s", normalizedPkgName, pkg.Version))
+			if err := os.MkdirAll(pkgOutputDir, 0o755); err != nil {
+				log.Printf("    [Worker] Warning: failed to create output directory for cached %s@%s: %v\n", pkg.Name, pkg.Version, err)
+			} else {
+				// Copy behavior.jsonl
+				if err := os.WriteFile(filepath.Join(pkgOutputDir, "behavior.jsonl"), data, 0o644); err != nil {
+					log.Printf("    [Worker] Warning: failed to copy cached behavior.jsonl to output: %v\n", err)
+				}
+				// Copy diff.json if it exists
+				if diffData, err := os.ReadFile(cachedDiffPath); err == nil {
+					if err := os.WriteFile(filepath.Join(pkgOutputDir, "diff.json"), diffData, 0o644); err != nil {
+						log.Printf("    [Worker] Warning: failed to copy cached diff.json to output: %v\n", err)
+					}
+				}
+				// Copy ai-analysis.json if it exists in cache
+				cachedAIPath := filepath.Join(cacheDir, "ai-analysis.json")
+				if aiData, err := os.ReadFile(cachedAIPath); err == nil {
+					if err := os.WriteFile(filepath.Join(pkgOutputDir, "ai-analysis.json"), aiData, 0o644); err != nil {
+						log.Printf("    [Worker] Warning: failed to copy cached ai-analysis.json to output: %v\n", err)
+					}
+				}
+
+				// Notify via callback if provided
+				if o.progressCb != nil {
+					o.progressCb(pkg.Name, pkg.Version, 1)
+				}
+			}
+		}
+
 		artifacts := []string{artifactDir}
 
 		result.Success = true
