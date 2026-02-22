@@ -12,7 +12,62 @@ import (
 	"github.com/acheong08/hackeurope-spr/internal/parser"
 	"github.com/acheong08/hackeurope-spr/internal/registry"
 	"github.com/acheong08/hackeurope-spr/pkg/models"
+	"github.com/joho/godotenv"
 )
+
+// Config holds all environment/flag configuration for the spr CLI.
+type Config struct {
+	PackageJSONPath string
+	LockfilePath    string
+	OutputDir       string
+	RegistryURL     string
+	RegistryOwner   string
+	RegistryToken   string
+	GitHubToken     string
+	RepoOwner       string
+	RepoName        string
+	WorkflowFile    string
+	Concurrency     int
+	TimeoutMinutes  int
+	BaselinePath    string
+	OpenAIAPIKey    string
+}
+
+func loadConfig() *Config {
+	// Load .env file if present; ignore error (file is optional).
+	_ = godotenv.Load()
+
+	return &Config{
+		OutputDir:      getEnv("OUTPUT_DIR", "./analysis-results"),
+		RegistryURL:    getEnv("REGISTRY_URL", "https://git.duti.dev"),
+		RegistryOwner:  getEnv("REGISTRY_OWNER", "acheong08"),
+		RegistryToken:  getEnv("REGISTRY_TOKEN", ""),
+		GitHubToken:    getEnv("GITHUB_TOKEN", ""),
+		RepoOwner:      getEnv("REPO_OWNER", "acheong08"),
+		RepoName:       getEnv("REPO_NAME", "hackeurope-spr"),
+		WorkflowFile:   getEnv("WORKFLOW_FILE", "analyze-package.yml"),
+		Concurrency:    getEnvInt("CONCURRENCY", 5),
+		TimeoutMinutes: getEnvInt("TIMEOUT_MINUTES", 5),
+		BaselinePath:   getEnv("BASELINE_PATH", "safe-sample.json"),
+		OpenAIAPIKey:   getEnv("OPENAI_API_KEY", ""),
+	}
+}
+
+func getEnv(key, defaultValue string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return defaultValue
+}
 
 func main() {
 	// Check for subcommands
@@ -21,11 +76,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	cfg := loadConfig()
 	subcommand := os.Args[1]
 
 	switch subcommand {
 	case "check":
-		runCheckCommand(os.Args[2:])
+		runCheckCommand(cfg, os.Args[2:])
 	case "test":
 		runTestCommand(os.Args[2:])
 	default:
@@ -50,25 +106,12 @@ func printUsage() {
 	fmt.Println("Run 'spr <command> -help' for more information on a command.")
 }
 
-func runCheckCommand(args []string) {
-	// Default values
-	var (
-		packageJSONPath = ""
-		lockfilePath    = ""
-		outputDir       = "./analysis-results"
-		registryURL     = "https://git.duti.dev"
-		registryOwner   = "acheong08"
-		registryToken   = ""
-		githubToken     = os.Getenv("GITHUB_TOKEN")
-		repoOwner       = "acheong08"
-		repoName        = "hackeurope-spr"
-		workflowFile    = "analyze-package.yml"
-		concurrency     = 5
-		timeoutMinutes  = 5
-		baselinePath    = "safe-sample.json"
-	)
+func runCheckCommand(cfg *Config, args []string) {
+	// Flag values start from config (env / .env defaults); CLI flags override.
+	packageJSONPath := cfg.PackageJSONPath
+	lockfilePath := cfg.LockfilePath
 
-	// Parse flags manually (single dash)
+	// Parse flags manually (single dash); flags override env/config.
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-package":
@@ -83,61 +126,61 @@ func runCheckCommand(args []string) {
 			}
 		case "-output":
 			if i+1 < len(args) {
-				outputDir = args[i+1]
+				cfg.OutputDir = args[i+1]
 				i++
 			}
 		case "-registry-url":
 			if i+1 < len(args) {
-				registryURL = args[i+1]
+				cfg.RegistryURL = args[i+1]
 				i++
 			}
 		case "-registry-owner":
 			if i+1 < len(args) {
-				registryOwner = args[i+1]
+				cfg.RegistryOwner = args[i+1]
 				i++
 			}
 		case "-registry-token":
 			if i+1 < len(args) {
-				registryToken = args[i+1]
+				cfg.RegistryToken = args[i+1]
 				i++
 			}
 		case "-github-token":
 			if i+1 < len(args) {
-				githubToken = args[i+1]
+				cfg.GitHubToken = args[i+1]
 				i++
 			}
 		case "-repo-owner":
 			if i+1 < len(args) {
-				repoOwner = args[i+1]
+				cfg.RepoOwner = args[i+1]
 				i++
 			}
 		case "-repo-name":
 			if i+1 < len(args) {
-				repoName = args[i+1]
+				cfg.RepoName = args[i+1]
 				i++
 			}
 		case "-workflow":
 			if i+1 < len(args) {
-				workflowFile = args[i+1]
+				cfg.WorkflowFile = args[i+1]
 				i++
 			}
 		case "-concurrency":
 			if i+1 < len(args) {
 				if n, err := strconv.Atoi(args[i+1]); err == nil {
-					concurrency = n
+					cfg.Concurrency = n
 				}
 				i++
 			}
 		case "-timeout":
 			if i+1 < len(args) {
 				if n, err := strconv.Atoi(args[i+1]); err == nil {
-					timeoutMinutes = n
+					cfg.TimeoutMinutes = n
 				}
 				i++
 			}
 		case "-baseline":
 			if i+1 < len(args) {
-				baselinePath = args[i+1]
+				cfg.BaselinePath = args[i+1]
 				i++
 			}
 		case "-help":
@@ -147,14 +190,14 @@ func runCheckCommand(args []string) {
 	}
 
 	// Validate required tokens early
-	if registryToken == "" {
-		fmt.Fprintln(os.Stderr, "Error: -registry-token is required")
+	if cfg.RegistryToken == "" {
+		fmt.Fprintln(os.Stderr, "Error: -registry-token is required (or set REGISTRY_TOKEN in environment / .env)")
 		printCheckUsage()
 		os.Exit(1)
 	}
 
-	if githubToken == "" {
-		fmt.Fprintln(os.Stderr, "Error: -github-token is required (or set GITHUB_TOKEN environment variable)")
+	if cfg.GitHubToken == "" {
+		fmt.Fprintln(os.Stderr, "Error: -github-token is required (or set GITHUB_TOKEN in environment / .env)")
 		printCheckUsage()
 		os.Exit(1)
 	}
@@ -264,7 +307,7 @@ func runCheckCommand(args []string) {
 
 	// Step 1: Upload all packages to registry
 	fmt.Println("\nUploading packages to registry...")
-	uploader := registry.NewUploader(registryURL, registryOwner, registryToken)
+	uploader := registry.NewUploader(cfg.RegistryURL, cfg.RegistryOwner, cfg.RegistryToken)
 
 	ctx := context.Background()
 	if err := uploader.UploadGraph(ctx, graph); err != nil {
@@ -289,7 +332,7 @@ func runCheckCommand(args []string) {
 	}
 
 	// Create output directory
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
 		os.Exit(1)
 	}
@@ -302,31 +345,28 @@ func runCheckCommand(args []string) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Get API key from environment for AI analysis
-	apiKey := os.Getenv("OPENAI_API_KEY")
-
 	// Run analysis workflows
-	fmt.Printf("\nTriggering analysis workflows for %d direct dependencies (max %d concurrent)...\n", len(packagesToAnalyze), concurrency)
+	fmt.Printf("\nTriggering analysis workflows for %d direct dependencies (max %d concurrent)...\n", len(packagesToAnalyze), cfg.Concurrency)
 
 	orch := orchestrator.NewOrchestrator(
-		githubToken,
-		repoOwner,
-		repoName,
-		workflowFile,
-		concurrency,
-		time.Duration(timeoutMinutes)*time.Minute,
+		cfg.GitHubToken,
+		cfg.RepoOwner,
+		cfg.RepoName,
+		cfg.WorkflowFile,
+		cfg.Concurrency,
+		time.Duration(cfg.TimeoutMinutes)*time.Minute,
 		nil, // No progress callback for CLI
-		baselinePath,
-		apiKey,
+		cfg.BaselinePath,
+		cfg.OpenAIAPIKey,
 	)
 
-	_, err = orch.RunPackages(ctx, packagesToAnalyze, tempDir, outputDir)
+	_, err = orch.RunPackages(ctx, packagesToAnalyze, tempDir, cfg.OutputDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nAnalysis failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("\nAnalysis complete. Artifacts saved to: %s\n", outputDir)
+	fmt.Printf("\nAnalysis complete. Artifacts saved to: %s\n", cfg.OutputDir)
 }
 
 func printCheckUsage() {
