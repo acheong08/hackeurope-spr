@@ -61,24 +61,16 @@ interface PackageNode {
 export default function App() {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
-  const [analysisKey, setAnalysisKey] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [packageData, setPackageData] = useState<any>(null);
   const [packageContent, setPackageContent] = useState<string>("");
 
   const [selectedTab, setSelectedTab] = useState<Tab>(Tab.LOGS);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  
-  // Store full graph data for filtering
-  const [allNodes, setAllNodes] = useState<Node[]>([]);
-  const [allEdges, setAllEdges] = useState<Edge[]>([]);
-  const [directDependencyIds, setDirectDependencyIds] = useState<Set<string>>(new Set());
-  const [showDirectOnly, setShowDirectOnly] = useState(false);
 
   const { send, subscribe, isConnected } = useContext(SocketContext);
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
@@ -106,7 +98,6 @@ export default function App() {
               }
             });
           }
-          setDirectDependencyIds(directDeps);
           
           // Build nodes from DAG
           const newNodes: Node[] = payload.nodes.map((pkg) => ({
@@ -147,15 +138,9 @@ export default function App() {
             }
           });
 
-          // Store full graph data
-          setAllNodes(newNodes);
-          setAllEdges(newEdges);
-
-          // Layout the graph
           const layoutedNodes = getLayoutedElements(newNodes, newEdges);
           setNodes(layoutedNodes);
           setEdges(newEdges);
-          setShowDirectOnly(false);
           
           addLog(`✓ DAG received: ${payload.nodes.length} packages, ${newEdges.length} dependencies`);
           break;
@@ -169,9 +154,8 @@ export default function App() {
         
         case "package_status": {
           const payload = msg.payload as { package_id: string; name: string; version: string; status: string };
-          // Update style in allNodes
-          setAllNodes((currentAllNodes) =>
-            currentAllNodes.map((node) => {
+          setNodes((curNodes) =>
+            curNodes.map((node) => {
               if (node.id === payload.package_id) {
                 const style =
                   payload.status === "complete"
@@ -184,21 +168,7 @@ export default function App() {
               return node;
             })
           );
-          // Also update visible nodes
-          setNodes((currentNodes) =>
-            currentNodes.map((node) => {
-              if (node.id === payload.package_id) {
-                const style =
-                  payload.status === "complete"
-                    ? safePkgStyle
-                    : payload.status === "failed"
-                    ? flaggedPkgStyle
-                    : dataGatheringPkgStyle;
-                return { ...node, style };
-              }
-              return node;
-            })
-          );
+
           // Log status change
           const statusIcon = payload.status === "complete" ? "✓" : 
                             payload.status === "failed" ? "✗" : "→";
@@ -259,14 +229,9 @@ export default function App() {
     setIsAnalyzing(true);
     setProgress(0);
     setLogs([]);
-    setAnalysisKey((prev) => prev + 1);
     setSelectedTab(Tab.LOGS);
     setNodes([]);
     setEdges([]);
-    setAllNodes([]);
-    setAllEdges([]);
-    setDirectDependencyIds(new Set());
-    setShowDirectOnly(false);
 
     // Send analyze request
     addLog("→ Starting analysis...");
@@ -309,7 +274,6 @@ export default function App() {
       try {
         const content = e.target?.result as string;
         const json = JSON.parse(content);
-        setPackageData(json);
         setPackageContent(content);
 
         setLogs((prev) => [
@@ -330,37 +294,7 @@ export default function App() {
 
   const handleFileRemove = () => {
     setUploadedFile(null);
-    setPackageData(null);
     setPackageContent("");
-  };
-
-  // Toggle between showing all dependencies or only direct ones
-  const handleToggleDirectOnly = () => {
-    const newShowDirectOnly = !showDirectOnly;
-    setShowDirectOnly(newShowDirectOnly);
-    
-    if (newShowDirectOnly) {
-      // Filter to show only root and direct dependencies
-      const rootId = allNodes.find(n => n.id.includes("root@"))?.id;
-      const visibleIds = new Set([rootId, ...directDependencyIds].filter(Boolean) as string[]);
-      
-      const filteredNodes = allNodes.filter(n => visibleIds.has(n.id));
-      const filteredEdges = allEdges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
-      
-      // Re-layout the filtered graph
-      const layoutedNodes = getLayoutedElements(filteredNodes, filteredEdges);
-      setNodes(layoutedNodes);
-      setEdges(filteredEdges);
-      
-      addLog(`→ Showing ${filteredNodes.length} direct dependencies`);
-    } else {
-      // Show all dependencies
-      const layoutedNodes = getLayoutedElements(allNodes, allEdges);
-      setNodes(layoutedNodes);
-      setEdges(allEdges);
-      
-      addLog(`→ Showing all ${allNodes.length} dependencies`);
-    }
   };
 
   return (
