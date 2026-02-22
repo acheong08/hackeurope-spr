@@ -189,6 +189,9 @@ func (o *Orchestrator) RunPackages(ctx context.Context, packages []models.Packag
 		}
 	}
 
+	// Persist results to analysis-results/ cache so subsequent runs can skip workflows
+	o.persistToCache(packages, outputDir)
+
 	// Promote full dependency tree to safe registry if all packages passed
 	if err := o.promoteToSafeRegistry(ctx, packages, outputDir); err != nil {
 		return results, fmt.Errorf("safe registry promotion failed: %w", err)
@@ -647,6 +650,58 @@ func copyDirContents(src, dst string) error {
 	}
 
 	return nil
+}
+
+// persistToCache copies behavior.jsonl, diff.json, and ai-analysis.json from
+// outputDir back to the analysis-results/ cache directory so that subsequent
+// runs can skip the GitHub Actions workflow for these packages.
+func (o *Orchestrator) persistToCache(packages []models.Package, outputDir string) {
+	cacheRoot := "analysis-results"
+	filesToCache := []string{"behavior.jsonl", "diff.json", "ai-analysis.json"}
+
+	for _, pkg := range packages {
+		normalizedName := tester.NormalizePackageName(pkg.Name)
+		pkgKey := fmt.Sprintf("%s@%s", normalizedName, pkg.Version)
+		srcDir := filepath.Join(outputDir, pkgKey)
+		dstDir := filepath.Join(cacheRoot, pkgKey)
+
+		// Check if source dir exists
+		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+			continue
+		}
+
+		// Check if already fully cached (behavior.jsonl exists)
+		if _, err := os.Stat(filepath.Join(dstDir, "behavior.jsonl")); err == nil {
+			// Cache dir exists — still copy newer files (diff.json, ai-analysis.json)
+			// that may not have been cached yet
+		}
+
+		if err := os.MkdirAll(dstDir, 0o755); err != nil {
+			o.logMsg(fmt.Sprintf("Failed to create cache directory for %s: %v", pkgKey, err), "warning")
+			continue
+		}
+
+		for _, fileName := range filesToCache {
+			srcPath := filepath.Join(srcDir, fileName)
+			dstPath := filepath.Join(dstDir, fileName)
+
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				continue // File doesn't exist in output — skip silently
+			}
+
+			// Skip if destination already exists and is same size
+			if info, err := os.Stat(dstPath); err == nil && info.Size() == int64(len(data)) {
+				continue
+			}
+
+			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
+				o.logMsg(fmt.Sprintf("Failed to cache %s for %s: %v", fileName, pkgKey, err), "warning")
+			}
+		}
+	}
+
+	o.logMsg("Persisted analysis results to cache", "info")
 }
 
 // runAIAnalysis runs AI security analysis on all packages with diffs

@@ -236,6 +236,9 @@ func (p *Pipeline) sendDAG(graph *models.DependencyGraph) error {
 // uploadPackages uploads the dependency graph to the registry
 func (p *Pipeline) uploadPackages(ctx context.Context, graph *models.DependencyGraph) error {
 	uploader := registry.NewUploader(p.registryURL, p.registryOwner, p.registryToken)
+	uploader.SetLogCallback(func(message, level string) {
+		p.sender.SendLog(message, level)
+	})
 
 	// Track progress
 	totalPackages := len(graph.Nodes)
@@ -296,6 +299,9 @@ func (p *Pipeline) runWorkflows(ctx context.Context, packages []*models.PackageN
 	var safeUploader *registry.Uploader
 	if p.safeRegistryToken != "" {
 		safeUploader = registry.NewUploader(p.safeRegistryURL, p.safeRegistryOwner, p.safeRegistryToken)
+		safeUploader.SetLogCallback(func(message, level string) {
+			p.sender.SendLog(message, level)
+		})
 	}
 
 	// Create orchestrator

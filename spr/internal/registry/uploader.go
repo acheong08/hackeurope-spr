@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -17,6 +18,9 @@ import (
 	"github.com/acheong08/hackeurope-spr/pkg/models"
 )
 
+// LogCallback is an optional function for forwarding log messages (e.g. to WebSocket).
+type LogCallback func(message, level string)
+
 // Uploader handles uploading packages to Gitea registry
 type Uploader struct {
 	BaseURL     string
@@ -24,6 +28,7 @@ type Uploader struct {
 	Token       string
 	Concurrency int
 	HTTPClient  *http.Client
+	logCb       LogCallback
 }
 
 // NewUploader creates a new registry uploader
@@ -36,6 +41,19 @@ func NewUploader(baseURL, owner, token string) *Uploader {
 		HTTPClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
+	}
+}
+
+// SetLogCallback sets an optional callback for forwarding log messages.
+func (u *Uploader) SetLogCallback(cb LogCallback) {
+	u.logCb = cb
+}
+
+// logMsg prints to console and optionally forwards via the log callback.
+func (u *Uploader) logMsg(message, level string) {
+	log.Printf("%s", message)
+	if u.logCb != nil {
+		u.logCb(message, level)
 	}
 }
 
@@ -362,7 +380,7 @@ func (u *Uploader) UploadGraph(ctx context.Context, graph *models.DependencyGrap
 		return fmt.Errorf("unsupported non-npm dependencies found: %v. These dependency types are not yet supported", nonNpmDeps)
 	}
 
-	fmt.Printf("📦 Uploading %d packages to Gitea registry...\n", len(nodes))
+	u.logMsg(fmt.Sprintf("Uploading %d packages to Gitea registry...", len(nodes)), "info")
 
 	// Upload npm packages with worker pool
 	var wg sync.WaitGroup
@@ -398,7 +416,7 @@ func (u *Uploader) UploadGraph(ctx context.Context, graph *models.DependencyGrap
 
 			mu.Lock()
 			processedCount++
-			fmt.Printf("  [%d/%d] Uploaded: %s@%s\n", processedCount, len(nodes), n.Name, n.Version)
+			u.logMsg(fmt.Sprintf("[%d/%d] Uploaded: %s@%s", processedCount, len(nodes), n.Name, n.Version), "info")
 			mu.Unlock()
 		}(node)
 	}
@@ -411,7 +429,7 @@ func (u *Uploader) UploadGraph(ctx context.Context, graph *models.DependencyGrap
 		return err
 	}
 
-	fmt.Printf("✅ Successfully uploaded %d packages\n", len(nodes))
+	u.logMsg(fmt.Sprintf("Successfully uploaded %d packages", len(nodes)), "success")
 	return nil
 }
 
